@@ -91,7 +91,7 @@
 <body>
     <svg id="svg-layer"><defs id="svg-defs"></defs></svg>
 
-    <h1>vLLM 显存调度全景模拟 (第八步左侧高架绕行版)</h1>
+    <h1>显存调度与抢占</h1>
     
     <div class="controls">
         <button id="btnPrev" class="prev" onclick="prevStep()" disabled>◀ 上一步</button>
@@ -125,7 +125,7 @@
             </table>
             
             <div class="policy-inspector" id="policyInspector">
-                <div class="policy-title"><span>🧠 vLLM 抢占策略判定器</span><span id="policyModeBadge" class="policy-val active">NORMAL</span></div>
+                <div class="policy-title"><span>抢占策略判定器</span><span id="policyModeBadge" class="policy-val active">NORMAL</span></div>
                 <div class="policy-row"><span>GPU 显存状态:</span><span id="policyGpuStatus" class="policy-val">充足</span></div>
                 <div class="policy-row"><span>CPU Swap 空间:</span><span id="policyCpuStatus" class="policy-val">3/4 可用</span></div>
                 <div class="policy-row"><span>触发抢占策略:</span><span id="policyAction" class="policy-val active">无（正常调度）</span></div>
