@@ -154,11 +154,11 @@
                 <div class="col-title" style="color:var(--node-p)">车间 Prefill (P组)</div>
                 <div class="server-node" id="node-73">
                     <div class="server-title"><strong>73 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-73" style="border-color:var(--node-p)">📦 P头 (gRPC :9081)<br><span style="font-size:10px;">vLLM 算力进程</span></div>
+                    <div class="pod-real" id="pod-73" style="border-color:var(--node-p)">📦 P头 (gRPC :9081)<br><span style="font-size:10px;">推理进程</span></div>
                 </div>
                 <div class="server-node" id="node-74">
                     <div class="server-title"><strong>74 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-74" style="border-color:var(--node-p)">📦 P跟班 (headless)<br><span style="font-size:10px;">vLLM 算力进程</span></div>
+                    <div class="pod-real" id="pod-74" style="border-color:var(--node-p)">📦 P跟班 (headless)<br><span style="font-size:10px;">推理进程</span></div>
                 </div>
             </div>
 
@@ -171,11 +171,11 @@
                 <div class="col-title" style="color:var(--node-d)">车间 Decode (D组)</div>
                 <div class="server-node" id="node-75">
                     <div class="server-title"><strong>75 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-75" style="border-color:var(--node-d)">📦 D头 (gRPC :9900)<br><span style="font-size:10px;">vLLM 生成进程</span></div>
+                    <div class="pod-real" id="pod-75" style="border-color:var(--node-d)">📦 D头 (gRPC :9900)<br><span style="font-size:10px;">生成进程</span></div>
                 </div>
                 <div class="server-node" id="node-76">
                     <div class="server-title"><strong>76 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-76" style="border-color:var(--node-d)">📦 D跟班 (headless)<br><span style="font-size:10px;">vLLM 生成进程</span></div>
+                    <div class="pod-real" id="pod-76" style="border-color:var(--node-d)">📦 D跟班 (headless)<br><span style="font-size:10px;">生成进程</span></div>
                 </div>
             </div>
         </div>
@@ -443,7 +443,7 @@
                 spawnGate(center.x, center.y - 120, "区分『舞台搭设』与『台上演戏』", "<span style='color:var(--api)'>蓝色边框：K8s 基建舞台</span><br><span style='color:var(--kv)'>青色边框：AI 业务负载</span>", "#fff");
 
                 log("📘 <b>[蓝色发光] K8s 大基建</b>：Office内的管家、车间的Kubelet工头、以及Service牌子。它们只负责『派发资源、拉起进程、引流网络』。");
-                log("🟩 <b>[青色发光] AI 业务层</b>：跑在容器内的 vLLM 引擎、以及底层的 Mooncake 全局缓存池。它们全权负责『算力执行与 KV 存取交接』，K8s 并不关心它们到底在算什么。");
+                log("🟩 <b>[青色发光] AI 业务层</b>：跑在容器内的推理引擎、以及底层的 Mooncake 全局缓存池。它们全权负责『算力执行与 KV 存取交接』，K8s 并不关心它们到底在算什么。");
 
                 btn.style.display = 'none';
                 resetBtn.style.display = 'inline-block';
