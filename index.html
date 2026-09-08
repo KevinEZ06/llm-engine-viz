@@ -442,7 +442,7 @@
                                     <div className="flex flex-col gap-2 mb-4 custom-scroll overflow-y-auto pr-1">
                                         <button onClick={() => handleAddRequest("SYSTEM: 你是一个AI助手。")} className="text-left text-xs bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700">1. SYSTEM: 你是一个AI助手。</button>
                                         <button onClick={() => handleAddRequest("SYSTEM: 你是一个AI助手。\nUSER: 什么是SGLang？")} className="text-left text-xs bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700">2. ...USER: 什么是SGLang？(分裂)</button>
-                                        <button onClick={() => handleAddRequest("SYSTEM: 你是一个AI助手。\nUSER: 什么是vLLM？")} className="text-left text-xs bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700">3. ...USER: 什么是vLLM？(复用)</button>
+                                        <button onClick={() => handleAddRequest("SYSTEM: 你是一个AI助手。\nUSER: 什么是vLLM？")} className="text-left text-xs bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700">3. ...USER: 什么是RadixAttention？(复用)</button>
                                         <button onClick={() => handleAddRequest("SYSTEM: 这是一个极其漫长的请求，用来快速占用大量的 KV Cache 空间，从而在显存达到上限时强势触发 Radix Tree 的 LRU 淘汰机制。")} className="text-left text-xs bg-amber-950/50 hover:bg-amber-900 text-amber-200 p-2.5 rounded border border-amber-900">🧨 挤爆显存 (强制触发淘汰)</button>
                                     </div>
                                     <div className="mt-auto pt-2 border-t border-slate-800/50">
