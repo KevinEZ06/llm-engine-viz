@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Token 全链路 · 从网关到吐字</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #152033;
+      --border: #2a3a52;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --blue: #5b9fff;
+      --blue-btn: #2f6fed;
+      --amber: #e8a317;
+      --green: #3ecf8e;
+      --red: #f85149;
+      --violet: #bc8cff;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; min-height: 100%;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .page { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
+    h1 {
+      margin: 0 0 .35rem; font-size: 1.45rem;
+      background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lead { margin: 0 0 1rem; color: var(--muted); font-size: .92rem; line-height: 1.55; }
+    .controls { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: .85rem; }
+    button {
+      border: none; border-radius: .55rem; padding: .5rem .9rem;
+      font-weight: 600; cursor: pointer; color: #fff; background: #334155;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-next { background: var(--blue-btn); }
+    .btn-auto.on { background: #b45309; }
+    .status {
+      background: rgba(30,58,95,.35); border: 1px solid rgba(91,159,255,.28);
+      border-radius: .7rem; padding: .85rem 1rem; margin-bottom: 1rem; min-height: 4.4rem;
+    }
+    .status .lbl { color: var(--blue); font-weight: 700; margin-right: .4rem; }
+    .status p { margin: 0; line-height: 1.55; font-size: .95rem; color: #dbeafe; }
+
+    .lane {
+      display: grid; grid-template-columns: 7.2rem 1fr; gap: .65rem;
+      margin-bottom: .55rem; align-items: stretch;
+    }
+    .lane-lab {
+      font-size: .72rem; color: var(--muted); letter-spacing: .04em;
+      display: flex; align-items: center; text-transform: uppercase;
+    }
+    .row {
+      display: flex; flex-wrap: wrap; gap: .45rem;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .75rem; padding: .5rem;
+    }
+    .box {
+      flex: 1 1 7.5rem; min-width: 6.8rem;
+      background: #0f1a2c; border: 1px solid var(--border);
+      border-radius: .6rem; padding: .55rem .65rem; transition: .25s;
+    }
+    .box strong { display: block; font-size: .78rem; margin-bottom: .2rem; }
+    .box p { margin: 0; font-size: .72rem; color: var(--muted); line-height: 1.4; }
+    .box.on { border-color: var(--cyan); box-shadow: inset 3px 0 0 var(--cyan); background: #12304a; }
+    .box.done { opacity: .72; }
+    .c-client strong { color: #fff; }
+    .c-gw strong { color: var(--blue); }
+    .c-k8s strong { color: #58a6ff; }
+    .c-p strong { color: var(--red); }
+    .c-d strong { color: var(--violet); }
+    .c-kv strong { color: var(--cyan); }
+    .c-out strong { color: var(--green); }
+
+    .inner {
+      display: none; margin-top: .85rem;
+      background: #0f1a2c; border: 1px dashed var(--border);
+      border-radius: .75rem; padding: .85rem .95rem;
+    }
+    .inner.show { display: block; }
+    .inner h3 { margin: 0 0 .55rem; font-size: .95rem; color: #c7d2fe; }
+    .path {
+      display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+    }
+    .chip {
+      font-size: .75rem; padding: .35rem .6rem; border-radius: .45rem;
+      border: 1px solid var(--border); background: #0b1220; color: var(--muted);
+    }
+    .chip.on { color: #fff; border-color: var(--amber); background: rgba(232,163,23,.18); }
+    .arrow { color: var(--amber); font-weight: 700; }
+
+    .links { margin-top: 1.1rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+    .links a { color: var(--blue); }
+    .legend { display: flex; flex-wrap: wrap; gap: .7rem; font-size: .75rem; color: var(--muted); margin-bottom: .7rem; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>一个 Token 从输入到吐字</h1>
+    <p class="lead">
+      对应课表 II.2 Path of a Request，也对应 AI Infra lesson1：
+      网关 → K8s → PD worker → tokenizer / Att·MLP 切分 → KV 交接 → 流式返回。
+      本页只建立<strong>路径直觉</strong>；层内 TP/EP/CP 细节见
+      <a href="parallel.html" style="color:#5b9fff">parallel.html</a>，
+      Decode 批处理见 <a href="batching.html" style="color:#5b9fff">batching.html</a>。
+    </p>
+    <div class="legend">
+      <span>蓝 = 控制面</span>
+      <span>红 = Prefill</span>
+      <span>紫 = Decode</span>
+      <span>青 = KV 交接</span>
+    </div>
+    <div class="controls">
+      <button class="btn-next" id="btnNext">下一步</button>
+      <button id="btnAuto">自动播放</button>
+      <button id="btnReset">重置</button>
+    </div>
+    <div class="status"><span class="lbl">STEP 0</span><p id="cap">待命。点「下一步」发送一条长请求。</p></div>
+
+    <div class="lane">
+      <div class="lane-lab">Client</div>
+      <div class="row">
+        <div class="box c-client" id="b-client"><strong>HTTP / SSE</strong><p>/v1/chat/completions</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-lab">Gateway</div>
+      <div class="row">
+        <div class="box c-gw" id="b-proxy"><strong>统一入口</strong><p>只对公网暴露 Proxy</p></div>
+        <div class="box c-gw" id="b-pick"><strong>选 P + 选 D</strong><p>按负载 / cache 亲和</p></div>
+        <div class="box c-gw" id="b-orch"><strong>PD 编排</strong><p>先 P 再 D，再回写 usage</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-lab">K8s</div>
+      <div class="row">
+        <div class="box c-k8s" id="b-svc-p"><strong>Service/prefill</strong><p>ClusterIP，不对公网</p></div>
+        <div class="box c-k8s" id="b-svc-d"><strong>Service/decode</strong><p>ClusterIP</p></div>
+        <div class="box c-k8s" id="b-dns"><strong>DNS / Endpoints</strong><p>扩缩后 Proxy 再发现</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-lab">Prefill</div>
+      <div class="row">
+        <div class="box c-p" id="b-tok"><strong>Tokenizer</strong><p>prompt → token ids</p></div>
+        <div class="box c-p" id="b-chunk"><strong>Chunked Prefill</strong><p>算力墙，可切块</p></div>
+        <div class="box c-p" id="b-att"><strong>Att / Dense / Shared</strong><p>走 TP（密通信）</p></div>
+        <div class="box c-p" id="b-moe"><strong>Routed MoE</strong><p>走 EP All-to-All</p></div>
+        <div class="box c-p" id="b-tx"><strong>KV Producer</strong><p>写出压缩 KV</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-lab">Handoff</div>
+      <div class="row">
+        <div class="box c-kv" id="b-kv"><strong>Mooncake / RDMA</strong><p>请求级大对象，不是每字搬权重</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-lab">Decode</div>
+      <div class="row">
+        <div class="box c-d" id="b-boot"><strong>预留显存</strong><p>KVPoll Waiting</p></div>
+        <div class="box c-d" id="b-rx"><strong>KV Consumer</strong><p>Transferring → Success</p></div>
+        <div class="box c-d" id="b-cb"><strong>Continuous Batch</strong><p>与其他请求同 step</p></div>
+        <div class="box c-d" id="b-mtp"><strong>MTP / EAGLE</strong><p>草稿 → 验证 → 接受</p></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="lane-lab">Return</div>
+      <div class="row">
+        <div class="box c-out" id="b-sse"><strong>流式 token</strong><p>Proxy 聚合 SSE</p></div>
+        <div class="box c-out" id="b-usage"><strong>usage 修正</strong><p>cached_tokens 回写</p></div>
+      </div>
+    </div>
+
+    <div class="inner" id="inner">
+      <h3 id="inner-title">Worker 内部</h3>
+      <div class="path" id="inner-path"></div>
+    </div>
+
+    <p class="links">
+      同链路分镜：
+      <a href="kvpd.html">kvpd.html</a> KVPoll 五色 ·
+      <a href="pipeline.html">pipeline.html</a> Router 打分 ·
+      <a href="k8s.html">k8s.html</a> 全局 KV ·
+      <a href="eagle3.html">eagle3.html</a> 推测解码 ·
+      <a href="batching.html">batching.html</a> 调度器视角。
+    </p>
+  </div>
+  <script src="nav.js"></script>
+  <script>
+    const STEPS = [
+      { ids: [], cap: "待命。点「下一步」发送一条长请求。" },
+      { ids: ["b-client"], cap: "客户端只打 Proxy。不要直连 P/D，否则压测口径和业务入口会分叉。" },
+      { ids: ["b-client","b-proxy","b-pick"], cap: "Proxy 同时选一个 Prefill 实例和一个 Decode 实例。选机看负载（P 看排队 token，D 看 KV / 并发），可叠加前缀亲和。" },
+      { ids: ["b-proxy","b-orch","b-svc-p","b-svc-d","b-dns"], cap: "K8s 只负责发现与生命周期：Service DNS → Pod。引擎语义不变，变的是地址从固定 IP 变成 Endpoints。" },
+      { ids: ["b-tok","b-chunk"], cap: "Prefill Pod 内先分词。超长 prompt 走 chunked prefill：一块一块算，避免一次占满调度槽。", inner: "tok" },
+      { ids: ["b-chunk","b-att","b-moe"], cap: "同一层里路径分叉：Attention / 共享专家走 TP（每层 All-Reduce）；routed 专家走 EP（两次 All-to-All）。超长 KV 才叠 CP。", inner: "layer" },
+      { ids: ["b-tx","b-kv","b-boot"], cap: "P 作为 kv_producer 写出 KV；D 早已预留显存（灰灯 Waiting）。搬的是这份请求的 KV，不是每一步把专家权重从 P 寄到 D。" },
+      { ids: ["b-kv","b-rx","b-cb"], cap: "KV 到齐 → Success → 首 token（TTFT）。之后 D 把请求丢进 Continuous Batching，和别的 decode 同一次 forward。" },
+      { ids: ["b-cb","b-mtp","b-sse","b-usage"], cap: "可选 MTP / EAGLE 在 Decode 侧投机出字。Proxy 聚合 SSE，并用 Prefill 的 cached_tokens 修正 usage 后回客户端。" }
+    ];
+
+    const INNER = {
+      tok: {
+        title: "Prefill worker 入口",
+        chips: ["HTTP handler", "Tokenizer", "Prefix cache 查找", "Chunked forward"]
+      },
+      layer: {
+        title: "一层里的两条路（开启 EP 时）",
+        chips: ["QKV / O / Shared · TP All-Reduce", "Router 选 top-k 专家", "All-to-All 寄出", "Expert FFN", "All-to-All 寄回", "残差 + 下一层"]
+      }
+    };
+
+    let step = 0, timer = null;
+
+    function render() {
+      document.querySelectorAll(".box").forEach(el => {
+        el.classList.remove("on", "done");
+      });
+      const cur = STEPS[step];
+      const seen = new Set();
+      for (let i = 1; i <= step; i++) STEPS[i].ids.forEach(id => seen.add(id));
+      seen.forEach(id => document.getElementById(id).classList.add("done"));
+      cur.ids.forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.remove("done");
+        el.classList.add("on");
+      });
+      document.querySelector(".status .lbl").textContent = "STEP " + step + " / " + (STEPS.length - 1);
+      document.getElementById("cap").textContent = cur.cap;
+
+      const inner = document.getElementById("inner");
+      if (cur.inner) {
+        const spec = INNER[cur.inner];
+        inner.classList.add("show");
+        document.getElementById("inner-title").textContent = spec.title;
+        document.getElementById("inner-path").innerHTML = spec.chips.map((c, i) =>
+          '<span class="chip on">' + c + "</span>" + (i < spec.chips.length - 1 ? '<span class="arrow">→</span>' : "")
+        ).join("");
+      } else {
+        inner.classList.remove("show");
+      }
+      document.getElementById("btnNext").disabled = step >= STEPS.length - 1;
+    }
+
+    function next() {
+      if (step < STEPS.length - 1) { step++; render(); }
+      else stopAuto();
+    }
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+      document.getElementById("btnAuto").classList.remove("on");
+      document.getElementById("btnAuto").textContent = "自动播放";
+    }
+    document.getElementById("btnNext").onclick = next;
+    document.getElementById("btnReset").onclick = () => { stopAuto(); step = 0; render(); };
+    document.getElementById("btnAuto").onclick = () => {
+      if (timer) { stopAuto(); return; }
+      if (step >= STEPS.length - 1) step = 0;
+      document.getElementById("btnAuto").classList.add("on");
+      document.getElementById("btnAuto").textContent = "停止";
+      timer = setInterval(next, 1700);
+    };
+    render();
+  </script>
+</body>
+</html>
