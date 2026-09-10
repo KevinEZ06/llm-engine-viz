@@ -10,6 +10,7 @@
 
 | 页面 | 讲什么 |
 |------|--------|
+| [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 一个 Token 从输入到输出 |
 | [index.html](https://kevinez06.github.io/llm-engine-viz/) | RadixAttention：前缀树、节点加锁、LRU 淘汰 |
 | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | Paged KV Cache：逻辑块与物理页 |
 | [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | KV 调度：Swap / Recompute 抢占 |
@@ -40,7 +41,7 @@
 | 6 | Part I · 第4章 KV Cache | ✅ | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 逻辑块 ↔ 物理页 |
 | 7 | Part I · 第5章 Benchmark | 🔄 | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html)（TTFT 分解）· [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | TTFT / 尾延迟直觉 |
 | 8 | Part II · 1 引擎长什么样 | 📝 | 没有 | — | 总架构图尚未补充 |
-| 9 | Part II · 2 Path of a Request | 🚧 | 没有 | — | 规划：`journey.html`（Token 全链路总览） |
+| 9 | Part II · 2 Path of a Request | ✅ | **已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | Token 全链路 |
 | 10 | Part II · 3 Forward & Generation | 🚧 | 没有 | — | 前向/生成循环尚未补充 |
 | 11 | Part II · 4 KV Cache 实现 | 🚧 | **已有**（复用） | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 与 I.4 同页，手搓前复习 |
 | 12 | Part II · 5 HTTP 与并发 | 🚧 | 没有 | — | 服务化/并发尚未补充 |
@@ -58,26 +59,11 @@
 | 24 | Part IV · 2 Profiling & Trace | 🚧 | 没有 | — | 未做 |
 | 25 | Part IV · 3 SGLang PR 流程 | 🚧 | 没有 | — | 不需要 |
 
-
-### 已有页面 → 最早可用课程序号
-
-| 页面 | 课程序号 |
-|------|----------|
-| [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | I.4 → II.7 |
-| [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | I.5 → II.7 |
-| [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) | I.2 → I.5 → III.5 |
-| [index.html](https://kevinez06.github.io/llm-engine-viz/)（Radix） | II.8 |
-| [eagle3.html](https://kevinez06.github.io/llm-engine-viz/eagle3.html) / [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | II.10 |
-| [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) | III.5 |
-| [ring_attention.html](https://kevinez06.github.io/llm-engine-viz/ring_attention.html) | III.4（仅 CP） |
-| [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) | IV.1 |
-
 ### 补充计划
 
 1. II.6 Continuous Batching（优先补充）
-2. II.2 `journey.html` Token 全链路总览
-3. II.9 / III.4 DP·TP·EP 路径（III.4 目前只有 CP）
-4. 其余「没有」行暂缓
+2. II.9 / III.4 DP·TP·EP 路径（III.4 目前只有 CP）
+3. 其余「没有」行暂缓
 
 ## 本地打开
 
