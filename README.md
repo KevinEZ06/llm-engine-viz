@@ -16,8 +16,8 @@
 | [index.html](https://kevinez06.github.io/llm-engine-viz/) | RadixAttention：前缀树、节点加锁、LRU 淘汰 |
 | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | Paged KV Cache：逻辑块与物理页 |
 | [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | KV 调度：Swap / Recompute 抢占 |
-| [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | EAGLE-3 推测解码（自动播放） |
-| [eagle3.html](https://kevinez06.github.io/llm-engine-viz/eagle3.html) | EAGLE-3 树注意力与验证流水线（手动步进） |
+| [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | EAGLE-3 推测解码 |
+| [eagle3.html](https://kevinez06.github.io/llm-engine-viz/eagle3.html) | 投机解码全流程 |
 | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) | Prefill / Decode 分离 + KVPoll |
 | [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) | SMG 路由打分 |
 | [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) | K8s + Mooncake 全局 KV |
