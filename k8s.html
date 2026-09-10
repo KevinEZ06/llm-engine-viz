@@ -117,8 +117,8 @@
 <body>
 
     <div class="header">
-        <h2>Mooncake 交接与 K8s 架构透视 V27 (已修复)</h2>
-        <div style="font-size: 13px; color: #aaa; margin-top: 5px;">【终极解密】演练的最后一步，将通过高亮彻底剥离“K8s 基础设施”与“大模型业务逻辑”。</div>
+        <h2>Mooncake 传输与 K8s 架构</h2>
+        <div style="font-size: 13px; color: #aaa; margin-top: 5px;">K8s与业务负载。</div>
     </div>
 
     <div class="btn-group">
@@ -133,12 +133,12 @@
         <div id="gate-layer"></div>
 
         <div class="zone zone-office" id="zone-office">
-            <div class="zone-title">🏢 办公室 (Control Plane) - 指令大脑与全息账本</div>
+            <div class="zone-title">🏢 办公室 (Control Plane) - 指令大脑与etcd账本</div>
             <div class="office-layout">
                 <div class="node-box" id="node-api"><b>前台 API Server</b><span>收发订单 / 验 kind</span></div>
                 <div class="node-box" id="node-etcd">
                     <b>保险柜 etcd</b><span>只存「应该有什么」</span>
-                    <div class="ledger-screen" id="ledger">[全息账本]<br>等待录入...</div>
+                    <div class="ledger-screen" id="ledger">[etcd账本]<br>等待录入...</div>
                 </div>
                 <div class="office-managers">
                     <div class="node-box node-ctrl" id="node-lws"><b>LWS 管家</b><span>维持 1头1尾 结构</span></div>
@@ -308,7 +308,7 @@
         function resetSimulation() {
             step = 0;
             flowLayer.innerHTML = '<defs id="arrow-defs"></defs>'; clearGates(); term.innerHTML = '';
-            ledger.innerHTML = '[全息账本]<br>等待录入...';
+            ledger.innerHTML = '[etcd]<br>等待录入...';
             ['73','74','75','76'].forEach(id => { document.getElementById(`pod-${id}`).style.display = 'none'; });
             document.getElementById('node-svc-p').style.opacity = '0.5';
             document.getElementById('node-svc-d').style.opacity = '0.5';
@@ -384,7 +384,7 @@
                 drawFlow('node-svc-d', 'pod-75', 'var(--svc)', 'solid');
                 await wait(1500);
                 
-                btn.innerText = "▶ 6. 见证 存算分离极致交接";
+                btn.innerText = "▶ 6. Mooncake 存算分离交接";
                 btn.style.boxShadow = "0 0 25px var(--kv)";
 
             } else if (step === 6) {
@@ -424,7 +424,7 @@
 
             } else if (step === 7) {
                 log("<br>=============================", "#fff");
-                log("🔲 <b>[Step 7] 终极解密：框出 Kubernetes 的基建边界</b>", "var(--api)");
+                log("🔲 <b>[Step 7] 框出 Kubernetes 基建边界</b>", "var(--api)");
 
                 // 【已修复原本会导致 JS 卡死的引号语法错误】
                 document.getElementById('zone-office').classList.add('k8s-boundary');
