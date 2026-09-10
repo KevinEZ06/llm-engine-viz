@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TP / DP / EP / CP · 切哪一轴</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #152033;
+      --border: #2a3a52;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --blue: #5b9fff;
+      --blue-btn: #2f6fed;
+      --amber: #e8a317;
+      --green: #3ecf8e;
+      --red: #f85149;
+      --violet: #a78bfa;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; min-height: 100%;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .page { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
+    h1 {
+      margin: 0 0 .35rem; font-size: 1.45rem;
+      background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lead { margin: 0 0 1rem; color: var(--muted); font-size: .92rem; line-height: 1.55; }
+    a { color: var(--blue); }
+    .controls { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: .85rem; }
+    button {
+      border: none; border-radius: .55rem; padding: .5rem .9rem;
+      font-weight: 600; cursor: pointer; color: #fff; background: #334155;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-next { background: var(--blue-btn); }
+    .btn-auto.on { background: #b45309; }
+    .status {
+      background: rgba(30,58,95,.35); border: 1px solid rgba(91,159,255,.28);
+      border-radius: .7rem; padding: .85rem 1rem; margin-bottom: 1rem; min-height: 4.6rem;
+    }
+    .status .lbl { color: var(--blue); font-weight: 700; margin-right: .4rem; }
+    .status p { margin: 0; line-height: 1.55; font-size: .95rem; color: #dbeafe; }
+    .status code, .links code, .opcard code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .84em; color: #93c5fd;
+    }
+    .opbar {
+      display: grid; grid-template-columns: 1.2fr 1fr 1.4fr; gap: .55rem;
+      margin: -.35rem 0 1rem;
+    }
+    @media (max-width: 860px) { .opbar { grid-template-columns: 1fr; } }
+    .opcard {
+      background: #0f1a2c; border: 1px solid var(--border); border-radius: .55rem;
+      padding: .55rem .7rem;
+    }
+    .opcard .k { font-size: .68rem; color: var(--muted); letter-spacing: .04em; margin-bottom: .2rem; }
+    .opcard .v { font-size: .82rem; line-height: 1.4; color: #dbeafe; }
+
+    .stage {
+      position: relative;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .9rem; padding: 1rem 1.1rem 1.15rem;
+      min-height: 28rem;
+    }
+    .reqs {
+      display: flex; gap: .5rem; margin-bottom: .85rem; min-height: 2.4rem;
+    }
+    .tok {
+      width: 2.2rem; height: 2.2rem; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800; color: #081018;
+      background: #94a3b8; transition: .35s;
+    }
+    .tok.a { background: #38bdf8; }
+    .tok.b { background: #f472b6; }
+    .tok.fly { box-shadow: 0 0 16px currentColor; transform: scale(1.12); }
+
+    .nodes { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; position: relative; z-index: 2; }
+    @media (max-width: 800px) { .nodes { grid-template-columns: 1fr; } }
+    .node {
+      border: 1px dashed #3b4d66; border-radius: .75rem; padding: .65rem .7rem .8rem;
+      background: #0f1a2c;
+    }
+    .node-lab { font-size: .72rem; color: var(--muted); margin-bottom: .5rem; letter-spacing: .04em; }
+    .gpus { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+    .gpu {
+      min-height: 6.4rem; border-radius: .65rem; border: 2px solid #243044;
+      background: #0b1220; padding: .5rem .55rem; transition: .3s;
+      position: relative;
+    }
+    .gpu .id { font-family: ui-monospace, monospace; font-size: .78rem; color: #93c5fd; font-weight: 700; }
+    .gpu .op { margin-top: .35rem; font-size: .78rem; color: var(--muted); min-height: 2.4em; line-height: 1.35; }
+    .gpu .tag {
+      position: absolute; right: .4rem; top: .4rem;
+      font-size: .62rem; padding: .1rem .35rem; border-radius: .3rem;
+      background: #1e293b; color: #94a3b8; font-family: ui-monospace, monospace;
+    }
+    .gpu.idle { opacity: .42; }
+    .gpu.comp { border-color: #38bdf8; background: #12304a; box-shadow: inset 3px 0 0 #38bdf8; }
+    .gpu.wait { border-color: #64748b; }
+    .gpu.hot { border-color: var(--red); background: #3b1520; box-shadow: 0 0 18px rgba(248,81,73,.35); }
+    .gpu.ar { border-color: var(--amber); }
+    .gpu.dp0 { outline: 2px solid rgba(56,189,248,.35); }
+    .gpu.dp1 { outline: 2px solid rgba(244,114,182,.35); }
+
+    svg.wires {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 3;
+    }
+    .wire { fill: none; stroke: var(--amber); stroke-width: 2.5; stroke-dasharray: 8 10; opacity: 0; }
+    .wire.on { opacity: .9; animation: dash 0.8s linear infinite; }
+    .wire.ep { stroke: var(--violet); }
+    .wire.dp { stroke: var(--green); stroke-dasharray: 2 8; opacity: .0; }
+    .wire.dp.on { opacity: .35; animation: none; }
+    @keyframes dash { to { stroke-dashoffset: -36; } }
+
+    .legend { display: flex; flex-wrap: wrap; gap: .7rem; font-size: .75rem; color: var(--muted); margin: .85rem 0 0; }
+    .legend i { display: inline-block; width: .7rem; height: .7rem; border-radius: .15rem; margin-right: .25rem; vertical-align: -1px; }
+    .links { margin-top: 1rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+
+    .dot {
+      position: absolute; width: 12px; height: 12px; border-radius: 50%;
+      pointer-events: none; z-index: 8; transform: translate(-50%,-50%);
+      transition: left .7s cubic-bezier(.2,.8,.2,1), top .7s cubic-bezier(.2,.8,.2,1), opacity .3s;
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>一张卡干不完：看 Token 怎么被切开</h1>
+    <p class="lead">
+      8 张卡、2 个节点。逐步看一层：QKV 切片 → AllReduce，
+      再 MoE Router + All-to-All dispatch / combine + Residual Add，最后 DP 再开一组。
+      Ring Attention 在 <a href="ring_attention.html">ring_attention.html</a>。
+    </p>
+    <div class="controls">
+      <button class="btn-next" id="btnNext">下一步</button>
+      <button id="btnAuto">自动播放</button>
+      <button id="btnReset">重置</button>
+    </div>
+    <div class="status"><span class="lbl">STEP 0</span><p id="cap">8 张卡待命。点下一步，一条请求进 GPU0。</p></div>
+    <div class="opbar">
+      <div class="opcard"><div class="k">本步算子</div><div class="v" id="d-op">—</div></div>
+      <div class="opcard"><div class="k">集合通信</div><div class="v" id="d-comm">—</div></div>
+      <div class="opcard"><div class="k">α–β 模型</div><div class="v" id="d-ab">Hockney：<code>T = α + n/β</code>。α 是与消息大小无关的 startup latency。</div></div>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="reqs" id="reqs"></div>
+      <div class="nodes">
+        <div class="node">
+          <div class="node-lab">节点 A · NVLink 域</div>
+          <div class="gpus">
+            <div class="gpu" id="g0"><span class="tag" id="t0">—</span><div class="id">GPU 0</div><div class="op" id="o0">空闲</div></div>
+            <div class="gpu" id="g1"><span class="tag" id="t1">—</span><div class="id">GPU 1</div><div class="op" id="o1">空闲</div></div>
+            <div class="gpu" id="g2"><span class="tag" id="t2">—</span><div class="id">GPU 2</div><div class="op" id="o2">空闲</div></div>
+            <div class="gpu" id="g3"><span class="tag" id="t3">—</span><div class="id">GPU 3</div><div class="op" id="o3">空闲</div></div>
+          </div>
+        </div>
+        <div class="node">
+          <div class="node-lab">节点 B · 跨节点要走网卡</div>
+          <div class="gpus">
+            <div class="gpu" id="g4"><span class="tag" id="t4">—</span><div class="id">GPU 4</div><div class="op" id="o4">空闲</div></div>
+            <div class="gpu" id="g5"><span class="tag" id="t5">—</span><div class="id">GPU 5</div><div class="op" id="o5">空闲</div></div>
+            <div class="gpu" id="g6"><span class="tag" id="t6">—</span><div class="id">GPU 6</div><div class="op" id="o6">空闲</div></div>
+            <div class="gpu" id="g7"><span class="tag" id="t7">—</span><div class="id">GPU 7</div><div class="op" id="o7">空闲</div></div>
+          </div>
+        </div>
+      </div>
+      <svg class="wires" id="wires"></svg>
+    </div>
+    <div class="legend">
+      <span><i style="background:#38bdf8"></i>在算</span>
+      <span><i style="background:#e8a317"></i>AllReduce（TP）</span>
+      <span><i style="background:#a78bfa"></i>All-to-All dispatch / combine（EP）</span>
+      <span><i style="background:#f85149"></i>热专家，别人在等</span>
+      <span><i style="background:#3ecf8e"></i>DP 组之间几乎不通信</span>
+    </div>
+    <p class="links">
+      Ring AllReduce：<code>T ≈ 2(N−1)α + 2(N−1)/N · n/β</code>（Hockney；NCCL ring 把 AllReduce 拆成 ReduceScatter + AllGather）。
+      Decode 每层 AllReduce 的 payload <code>n</code> 很小，时间由延迟项 <code>2(N−1)α</code> 主导，增大 TP 即增大 N，单步线性变慢。
+      全链路见 <a href="journey.html">journey.html</a>。
+    </p>
+  </div>
+  <script src="nav.js"></script>
+  <script>
+    const CAPS = [
+      "8 张卡待命。点下一步，一条请求进 GPU0。",
+      "单卡跑完整一层：Attention GEMM + MoE FFN 都在 GPU0，无集合通信。",
+      "Tensor Parallel：各 rank 只算自己的 QKV 切片（对应一部分 head），本步尚未同步。",
+      "各 rank 的 QKV 切片算完后，O 投影要把 hidden states 合成完整向量，因此 AllReduce。Ring AllReduce 延迟项为 2(N−1)α：N=TP 越大，α 被乘的次数越多。Decode 的 n 很小，这一项就是主耗时。",
+      "MoE：Router 做 top-k 后，All-to-All dispatch（token permute）把 token 送到持有对应 expert 的 rank。GPU2 上的 expert 过热，其余 rank wait。",
+      "Expert FFN（SwiGLU GEMM）算完。本步是 All-to-All combine（unpermute）把激活送回原 rank，再 Residual Add：h ← Attn/Shared 输出 + MoE 输出。Barrier 等最慢的 expert rank。",
+      "Data Parallel：节点 B 复制同一份已切分模型，独立跑请求 B。两组之间没有 AllReduce / All-to-All。",
+      "Decode 把 TP 从 4 收到 2（N 减半，2(N−1)α 下降），空出的卡做 DP。Prefill 的 n 大，带宽项 n/β 更显著，才用更大的 TP。"
+    ];
+
+    const META = [
+      { op: "—", comm: "无", ab: "Hockney：<code>T = α + n/β</code>。α = startup latency（发起一次传输的固定开销），β = 链路带宽。" },
+      { op: "Transformer block（单卡）", comm: "无", ab: "没有集合通信，α 不进入这一步。" },
+      { op: "QKV 切片（各 rank 一份 head / QKV）", comm: "无（只切计算）", ab: "本步只算切片，还没通信。" },
+      { op: "O 投影 + AllReduce（QKV 切片汇总）", comm: "AllReduce（ring = ReduceScatter + AllGather）", ab: "<code>T ≈ 2(N−1)α + 2(N−1)/N · n/β</code>。α 与 n 无关；N↑ 则延迟项线性增。" },
+      { op: "MoE Router (top-k) + All-to-All dispatch", comm: "AlltoAll（token permute）", ab: "AlltoAll 同样有 (N−1) 量级的 α 步。跨节点时 α 含 NIC/交换机。" },
+      { op: "Expert FFN → All-to-All combine → Residual Add", comm: "AlltoAll combine（unpermute）", ab: "完成时间 = max_rank(FFN + AlltoAll)。热专家拉高 P99。" },
+      { op: "同一 TP 组复制为两个 DP", comm: "组间无集合通信", ab: "DP 不付 AllReduce 的 α；代价是每组一份 KV。" },
+      { op: "Decode：TP=2 组内 AllReduce", comm: "AllReduce，N=2", ab: "N: 4→2，延迟项 2(N−1)α 从 6α 降到 2α。小消息 Decode 由 α 主导。" }
+    ];
+
+    const STEPS = [
+      { gpus: [], tags: Array(8).fill("—"), ops: Array(8).fill("空闲"), reqs: [], wires: [] },
+      {
+        gpus: [{ i: 0, cls: "comp" }],
+        tags: ["整模型", "闲", "闲", "闲", "闲", "闲", "闲", "闲"],
+        ops: ["Attention + MoE FFN", "空闲", "空闲", "空闲", "空闲", "空闲", "空闲", "空闲"],
+        reqs: [{ id: "A", at: 0 }],
+        wires: []
+      },
+      {
+        gpus: [0, 1, 2, 3].map(i => ({ i, cls: "comp dp0" })),
+        tags: ["TP0", "TP1", "TP2", "TP3", "闲", "闲", "闲", "闲"],
+        ops: ["QKV 切片 0", "QKV 切片 1", "QKV 切片 2", "QKV 切片 3", "空闲", "空闲", "空闲", "空闲"],
+        reqs: [{ id: "A", at: [0, 1, 2, 3] }],
+        wires: []
+      },
+      {
+        gpus: [0, 1, 2, 3].map(i => ({ i, cls: "ar dp0" })),
+        tags: ["TP0", "TP1", "TP2", "TP3", "闲", "闲", "闲", "闲"],
+        ops: ["汇总 QKV 切片", "汇总 QKV 切片", "汇总 QKV 切片", "汇总 QKV 切片", "空闲", "空闲", "空闲", "空闲"],
+        reqs: [{ id: "A", at: [0, 1, 2, 3] }],
+        wires: [[0, 1, "tp"], [1, 2, "tp"], [2, 3, "tp"], [3, 0, "tp"]]
+      },
+      {
+        gpus: [0, 1, 2, 3, 4, 5, 6, 7].map(i => ({ i, cls: i === 2 ? "hot" : "wait" })),
+        tags: ["E0", "E1", "E2 热", "E3", "E4", "E5", "E6", "E7"],
+        ops: ["AlltoAll dispatch", "AlltoAll dispatch", "Expert FFN（热）", "AlltoAll dispatch", "AlltoAll dispatch", "AlltoAll dispatch", "AlltoAll dispatch", "AlltoAll dispatch"],
+        reqs: [{ id: "A", at: 2 }],
+        wires: [[0, 2, "ep"], [1, 2, "ep"], [3, 2, "ep"], [4, 2, "ep"], [5, 2, "ep"], [6, 2, "ep"], [7, 2, "ep"]]
+      },
+      {
+        gpus: [0, 1, 2, 3].map(i => ({ i, cls: "comp dp0" })),
+        tags: ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7"],
+        ops: ["AlltoAll combine + Residual Add", "AlltoAll combine + Residual Add", "AlltoAll combine 发出", "AlltoAll combine + Residual Add", "空闲", "空闲", "空闲", "空闲"],
+        reqs: [{ id: "A", at: [0, 1, 2, 3] }],
+        wires: [[2, 0, "ep"], [2, 1, "ep"], [2, 3, "ep"]]
+      },
+      {
+        gpus: [0, 1, 2, 3].map(i => ({ i, cls: "comp dp0" })).concat(
+          [4, 5, 6, 7].map(i => ({ i, cls: "comp dp1" }))
+        ),
+        tags: ["A-TP0", "A-TP1", "A-TP2", "A-TP3", "B-TP0", "B-TP1", "B-TP2", "B-TP3"],
+        ops: ["A 组前向", "A 组前向", "A 组前向", "A 组前向", "B 组前向", "B 组前向", "B 组前向", "B 组前向"],
+        reqs: [{ id: "A", at: [0, 1, 2, 3] }, { id: "B", at: [4, 5, 6, 7] }],
+        wires: [[0, 1, "tp"], [1, 2, "tp"], [2, 3, "tp"], [3, 0, "tp"], [4, 5, "tp"], [5, 6, "tp"], [6, 7, "tp"], [7, 4, "tp"], [0, 4, "dp"]]
+      },
+      {
+        gpus: [
+          { i: 0, cls: "comp dp0" }, { i: 1, cls: "comp dp0" },
+          { i: 2, cls: "comp dp1" }, { i: 3, cls: "comp dp1" },
+          { i: 4, cls: "comp dp0" }, { i: 5, cls: "comp dp0" },
+          { i: 6, cls: "comp dp1" }, { i: 7, cls: "comp dp1" }
+        ],
+        tags: ["D0 TP0", "D0 TP1", "D1 TP0", "D1 TP1", "D2 TP0", "D2 TP1", "D3 TP0", "D3 TP1"],
+        ops: ["AllReduce N=2", "AllReduce N=2", "AllReduce N=2", "AllReduce N=2", "AllReduce N=2", "AllReduce N=2", "AllReduce N=2", "AllReduce N=2"],
+        reqs: [
+          { id: "A", at: [0, 1] }, { id: "B", at: [2, 3] }
+        ],
+        wires: [[0, 1, "tp"], [2, 3, "tp"], [4, 5, "tp"], [6, 7, "tp"]]
+      }
+    ];
+
+    let step = 0, timer = null;
+
+    function gpuCenter(i) {
+      const stage = document.getElementById("stage").getBoundingClientRect();
+      const el = document.getElementById("g" + i).getBoundingClientRect();
+      return { x: el.left - stage.left + el.width / 2, y: el.top - stage.top + el.height / 2 };
+    }
+
+    function drawWires(pairs) {
+      const svg = document.getElementById("wires");
+      const stage = document.getElementById("stage").getBoundingClientRect();
+      svg.setAttribute("viewBox", "0 0 " + stage.width + " " + stage.height);
+      svg.innerHTML = "";
+      pairs.forEach(([a, b, kind]) => {
+        const p = gpuCenter(a), q = gpuCenter(b);
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2 - 12;
+        line.setAttribute("d", "M" + p.x + " " + p.y + " Q " + mx + " " + my + " " + q.x + " " + q.y);
+        line.setAttribute("class", "wire on " + (kind || "tp"));
+        svg.appendChild(line);
+      });
+    }
+
+    function render() {
+      const s = STEPS[step];
+      for (let i = 0; i < 8; i++) {
+        const g = document.getElementById("g" + i);
+        g.className = "gpu idle";
+        document.getElementById("t" + i).textContent = s.tags[i];
+        document.getElementById("o" + i).textContent = s.ops[i];
+      }
+      s.gpus.forEach(({ i, cls }) => {
+        document.getElementById("g" + i).className = "gpu " + cls;
+      });
+      document.querySelector(".status .lbl").textContent = "STEP " + step + " / " + (STEPS.length - 1);
+      document.getElementById("cap").textContent = CAPS[step];
+      const m = META[step];
+      document.getElementById("d-op").innerHTML = m.op;
+      document.getElementById("d-comm").innerHTML = m.comm;
+      document.getElementById("d-ab").innerHTML = m.ab;
+      document.getElementById("btnNext").disabled = step >= STEPS.length - 1;
+      drawWires(s.wires);
+      paintReqs(s.reqs);
+    }
+
+    function paintReqs(reqs) {
+      const box = document.getElementById("reqs");
+      box.innerHTML = reqs.length
+        ? reqs.map(r => '<div class="tok ' + (r.id === "A" ? "a" : "b") + ' fly">' + r.id + "</div>").join("")
+        : '<span style="color:#8b9bb4;font-size:.82rem">还没有请求</span>';
+      document.querySelectorAll(".dot").forEach(d => d.remove());
+      const stage = document.getElementById("stage");
+      reqs.forEach(r => {
+        const targets = [].concat(r.at);
+        targets.forEach((gi, k) => {
+          const c = gpuCenter(gi);
+          const d = document.createElement("div");
+          d.className = "dot";
+          d.style.background = r.id === "A" ? "#38bdf8" : "#f472b6";
+          d.style.boxShadow = "0 0 12px " + d.style.background;
+          d.style.left = (40 + k * 28) + "px";
+          d.style.top = "28px";
+          stage.appendChild(d);
+          requestAnimationFrame(() => {
+            d.style.left = c.x + "px";
+            d.style.top = c.y + "px";
+          });
+        });
+      });
+    }
+
+    function next() {
+      if (step < STEPS.length - 1) { step++; render(); }
+      else stopAuto();
+    }
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+      document.getElementById("btnAuto").classList.remove("on");
+      document.getElementById("btnAuto").textContent = "自动播放";
+    }
+    document.getElementById("btnNext").onclick = next;
+    document.getElementById("btnReset").onclick = () => { stopAuto(); step = 0; render(); };
+    document.getElementById("btnAuto").onclick = () => {
+      if (timer) { stopAuto(); return; }
+      if (step >= STEPS.length - 1) step = 0;
+      document.getElementById("btnAuto").classList.add("on");
+      document.getElementById("btnAuto").textContent = "停止";
+      timer = setInterval(next, 1800);
+    };
+    window.addEventListener("resize", () => render());
+    render();
+  </script>
+</body>
+</html>
