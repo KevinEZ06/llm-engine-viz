@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PD 分离架构与 KVPoll 状态</title>
+    <title>PD 分离 · KVPoll 状态机</title>
     <style>
         :root {
             --bg: #0b0f19;
@@ -83,9 +83,9 @@
 <body>
 
     <div class="header">
-        <h2>Prefill-Decode 分离架构 & KVPoll 状态机演练 V12</h2>
-        <div style="font-size: 13px; color: #888;">揭秘 Router 并发扇出与 D 实例严密的状态流转</div>
-        <button id="startBtn" onclick="runSimulation()" style="margin-top:15px;">启动 PD 协同推理链路</button>
+        <h2>PD 分离 · KVPoll 状态机</h2>
+        <div style="font-size: 13px; color: #888;">Router 扇出到 P/D；D 侧 KVPoll 五色状态逐步点亮</div>
+        <button id="startBtn" onclick="runSimulation()" style="margin-top:15px;">启动推演</button>
     </div>
 
     <div class="plane-container" id="container">
@@ -341,5 +341,6 @@
             btn.disabled = false;
         }
     </script>
+  <script src="nav.js"></script>
 </body>
 </html>
