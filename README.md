@@ -1,6 +1,6 @@
 # llm-engine-viz
 
-交互式 LLM 推理可视化：RadixAttention、Paged KV Cache、PD 分离、EAGLE-3、Ring Attention 等。浏览器打开即可，无需 GPU、无需构建。
+交互式 LLM 推理可视化：RadixAttention、Paged KV Cache、PD 分离、EAGLE-3、Ring Attention、DP/TP/EP/CP 等。浏览器打开即可，无需 GPU、无需构建。
 
 可作为 [zero-to-sglang](https://github.com/datawhalechina/zero-to-sglang) 的**章节引子**：先看动画建立直觉，再读正文。
 
@@ -10,7 +10,8 @@
 
 | 页面 | 讲什么 |
 |------|--------|
-| [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 一个 Token 从输入到输出 |
+| [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 一个 Token 从输入到输出：网关 → K8s → P/D → 层内切分 → 流式返回 |
+| [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) | TP / DP / EP：QKV 切片、AllReduce、All-to-All、DP 组 |
 | [index.html](https://kevinez06.github.io/llm-engine-viz/) | RadixAttention：前缀树、节点加锁、LRU 淘汰 |
 | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | Paged KV Cache：逻辑块与物理页 |
 | [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | KV 调度：Swap / Recompute 抢占 |
@@ -21,7 +22,7 @@
 | [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) | K8s + Mooncake 全局 KV |
 | [ring_attention.html](https://kevinez06.github.io/llm-engine-viz/ring_attention.html) | Ring Attention / Context Parallel |
 
-建议顺序：缓存与注意力 → 推测解码 → 调度与部署。
+建议顺序：缓存与注意力 → 推测解码 → 调度与部署 → 并行与全链路。
 
 ## 与 zero-to-sglang 课程映射
 
@@ -36,34 +37,33 @@
 | 1 | Part 0 · 0.1 编码伦理与开源精神 | ✅ | 没有 | — | 不计划可视化 |
 | 2 | Part 0 · 0.2 部署第一个 SGLang 服务 | ✅ | 没有 | — | 实操暂不计划可视化 |
 | 3 | Part I · 第1章 LLM 入门 | ✅ | 没有 | — | Transformer / 暂未补充 |
-| 4 | Part I · 第2章 推理入门 | ✅ | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) | Prefill/Decode 拆分直觉（源码细节见 III.5） |
+| 4 | Part I · 第2章 推理入门 | ✅ | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) · [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | Prefill/Decode 拆分；请求落在哪一层 |
 | 5 | Part I · 第3章 GPU 入门 | 🔄 | 没有 | — | 硬件/执行流程暂未补充 |
 | 6 | Part I · 第4章 KV Cache | ✅ | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 逻辑块 ↔ 物理页 |
 | 7 | Part I · 第5章 Benchmark | 🔄 | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html)（TTFT 分解）· [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | TTFT / 尾延迟直觉 |
-| 8 | Part II · 1 引擎长什么样 | 📝 | 没有 | — | 总架构图尚未补充 |
+| 8 | Part II · 1 引擎长什么样 | 📝 | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 分层总览；模块图仍可再画 |
 | 9 | Part II · 2 Path of a Request | ✅ | **已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | Token 全链路 |
 | 10 | Part II · 3 Forward & Generation | 🚧 | 没有 | — | 前向/生成循环尚未补充 |
 | 11 | Part II · 4 KV Cache 实现 | 🚧 | **已有**（复用） | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 与 I.4 同页，手搓前复习 |
-| 12 | Part II · 5 HTTP 与并发 | 🚧 | 没有 | — | 服务化/并发尚未补充 |
+| 12 | Part II · 5 HTTP 与并发 | 🚧 | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html)（入口） | 服务化/并发细节尚未补充 |
 | 13 | Part II · 6 Continuous Batching | 🚧 | 没有 | — | **优先补充**；调度器视角 |
 | 14 | Part II · 7 Paged KV Cache | 🚧 | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) · [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | 分页；Swap / Recompute |
 | 15 | Part II · 8 RadixAttention | 🚧 | **已有** | [index.html](https://kevinez06.github.io/llm-engine-viz/) | 前缀树、加锁、LRU |
-| 16 | Part II · 9 多进程与 TP | 🚧 | 没有 | — | 规划：补充DP/TP/EP的权重切分与通信过程  |
+| 16 | Part II · 9 多进程与 TP | 🚧 | **已有** | [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) | QKV 切片、AllReduce；Decode 收小 TP |
 | 17 | Part II · 10 Speculative Decoding | 🚧 | **已有** | [eagle3.html](https://kevinez06.github.io/llm-engine-viz/eagle3.html) · [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | draft → verify → accept |
 | 18 | Part III · 1 Attention Backends & CUDA Graph | 🚧 | 没有 | — | 尚未补充，可参考官方 https://www.sglang.io/blog/breakable-cuda-graph |
 | 19 | Part III · 2 量化 | 🚧 | 没有 | — | 未做 |
 | 20 | Part III · 3 Hierarchical Caching | 🚧 | 没有 | — | 未做 |
-| 21 | Part III · 4 DP Attention / EP / PP | 🚧 | **部分已有** | [ring_attention.html](https://kevinez06.github.io/llm-engine-viz/ring_attention.html)（仅 CP） | CP/Ring **已有**；DP/TP/EP 路径 **没有** |
-| 22 | Part III · 5 Prefill-Decode Disaggregation | 🚧 | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) · [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) | KVPoll；Router 选 P/D |
-| 23 | Part IV · 1 Cookbook 部署 | 🚧 | **已有** | [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) | K8s + Mooncake（选修） |
+| 21 | Part III · 4 DP Attention / EP / PP | 🚧 | **已有** | [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) · [ring_attention.html](https://kevinez06.github.io/llm-engine-viz/ring_attention.html) | DP/TP/EP 路径 + Ring/CP 逐步 |
+| 22 | Part III · 5 Prefill-Decode Disaggregation | 🚧 | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) · [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) · [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | KVPoll；Router 选 P/D；全链路 |
+| 23 | Part IV · 1 Cookbook 部署 | 🚧 | **已有** | [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) · [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | K8s + Mooncake（选修） |
 | 24 | Part IV · 2 Profiling & Trace | 🚧 | 没有 | — | 未做 |
 | 25 | Part IV · 3 SGLang PR 流程 | 🚧 | 没有 | — | 不需要 |
 
 ### 补充计划
 
 1. II.6 Continuous Batching（优先补充）
-2. II.9 / III.4 DP·TP·EP 路径（III.4 目前只有 CP）
-3. 其余「没有」行暂缓
+2. 其余「没有」行暂缓
 
 ## 本地打开
 
