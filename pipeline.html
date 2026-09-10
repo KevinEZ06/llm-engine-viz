@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SMG智能路由与多目标博弈全息透视</title>
+    <title>SMG 路由打分 · 容量 vs 匹配</title>
     <style>
         :root {
             --bg: #0b0f19;
@@ -121,8 +121,8 @@
 <body>
 
     <div class="header">
-        <h2>SMG 智能路由：容量限制 vs 匹配率的全息博弈 V9</h2>
-        <div style="font-size: 13px; color: #888;">综合了 V7 的物理光球流水线 与 V8 的多目标打分算法，动态展示相爱相杀的调度过程。</div>
+        <h2>SMG 路由：容量限制 vs 匹配</h2>
+        <div style="font-size: 13px; color: #888;">多目标打分：在 KV 容量与缓存匹配率之间做路由决策</div>
         <button id="startBtn" onclick="runScenario()">发送请求 (场景 1：极速亲和命中)</button>
     </div>
 
@@ -205,7 +205,7 @@
     </div>
 
     <div class="terminal" id="term">
-        <div><span style="color:#666">[System]</span> 引擎就绪。点击上方按钮，观察容量与命中率在 SMG 路由时的相爱相杀。</div>
+        <div><span style="color:#666">[System]</span> 引擎就绪。点击上方按钮，观察容量与命中率如何影响 SMG 路由选择</div>
     </div>
 
     <script>
@@ -272,7 +272,7 @@
 
         const scenarios = [
             {
-                title: "场景 1：理想命中 (相爱)",
+                title: "场景 1：理想命中",
                 nextBtn: "发送请求 (场景 2：防爆仓降级)",
                 podA: { kv: 45, match: 95, score: 95 },
                 podB: { kv: 30, match: 10, score: 10 },
@@ -282,8 +282,8 @@
                 prefillLog: "✅ 命中 95% 缓存，跳过大量 Attention 矩阵计算，极速进入 Decode！"
             },
             {
-                title: "场景 2：容量告警 (相杀)",
-                nextBtn: "发送请求 (场景 3：折中博弈)",
+                title: "场景 2：容量告警",
+                nextBtn: "发送请求 (场景 3：折中选择)",
                 podA: { kv: 98, match: 95, score: -100 },
                 podB: { kv: 15, match: 0, score: 0 },
                 winner: 'b',
