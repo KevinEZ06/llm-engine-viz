@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>短请求被挡住了 · 静态批 / 连续批 / chunk</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #152033;
+      --border: #2a3a52;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --blue: #5b9fff;
+      --blue-btn: #2f6fed;
+      --amber: #e8a317;
+      --green: #3ecf8e;
+      --red: #f85149;
+      --violet: #bc8cff;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; min-height: 100%;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .page {
+      display: flex; flex-direction: column; align-items: stretch;
+      width: max-content; max-width: calc(100vw - 2rem);
+      margin: 0 auto; padding: 1.25rem 1.25rem 3rem;
+    }
+    h1, .lead, .legend, .controls, .status, .links { width: 100%; box-sizing: border-box; }
+    .lead { max-width: 48rem; }
+    h1 {
+      margin: 0 0 .35rem; font-size: 1.45rem;
+      background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lead { margin: 0 0 .85rem; color: var(--muted); font-size: .92rem; line-height: 1.55; }
+    a { color: var(--blue); }
+    .controls { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: .85rem; align-items: center; }
+    button {
+      border: none; border-radius: .55rem; padding: .5rem .9rem;
+      font-weight: 600; cursor: pointer; color: #fff; background: #334155;
+    }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-next { background: var(--blue-btn); }
+    .btn-auto.on { background: #b45309; }
+    .mode {
+      display: flex; gap: .35rem; border: 1px solid var(--border);
+      border-radius: .55rem; padding: .2rem;
+    }
+    .mode button { background: transparent; color: var(--muted); padding: .35rem .7rem; }
+    .mode button.on { background: #1c3358; color: #dbeafe; }
+    .status {
+      background: rgba(30,58,95,.35); border: 1px solid rgba(91,159,255,.28);
+      border-radius: .7rem; padding: .85rem 1rem; margin-bottom: 1rem; min-height: 4.4rem;
+    }
+    .status .lbl { color: var(--blue); font-weight: 700; margin-right: .4rem; }
+    .status p { margin: 0; line-height: 1.55; color: #dbeafe; font-size: .95rem; }
+
+    .gantt h2, .cmp h2 { margin: 0 0 .35rem; font-size: .9rem; color: var(--muted); font-weight: 600; }
+    .hint { margin: 0 0 .65rem; font-size: .78rem; color: var(--muted); line-height: 1.45; }
+
+    .gantt {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .85rem; padding: 1.05rem 1.15rem 1.15rem;
+      margin-bottom: 1rem;
+    }
+    .gantt-board { position: relative; width: max-content; max-width: 100%; overflow: visible; }
+    .scan {
+      position: absolute; pointer-events: none; z-index: 6;
+      border-radius: 1.15rem; opacity: 0;
+      background: linear-gradient(180deg, rgba(139,92,246,.08), rgba(139,92,246,.28), rgba(139,92,246,.08));
+      border: 2px solid rgba(196,181,253,.9);
+      box-shadow: 0 0 22px rgba(139,92,246,.55), inset 0 0 16px rgba(167,139,250,.18);
+      transition: left .4s cubic-bezier(.2,.8,.2,1), top .4s, width .4s, height .4s, opacity .25s;
+    }
+    .scan.on { opacity: 1; animation: scan-glow 1.8s ease-in-out infinite; }
+    .scan-lab {
+      position: absolute; left: 50%; top: .28rem; transform: translateX(-50%);
+      font-size: .62rem; font-weight: 800; letter-spacing: .04em;
+      color: #ede9fe; background: #4c1d95; border: 1px solid #c4b5fd;
+      border-radius: 999px; padding: .12rem .45rem; white-space: nowrap;
+      box-shadow: 0 0 8px rgba(139,92,246,.45);
+    }
+    @keyframes scan-glow {
+      0%, 100% { box-shadow: 0 0 14px rgba(139,92,246,.4), inset 0 0 12px rgba(167,139,250,.12); }
+      50% { box-shadow: 0 0 28px rgba(139,92,246,.8), inset 0 0 18px rgba(196,181,253,.22); }
+    }
+    table.g { border-collapse: separate; border-spacing: 3px; width: auto; table-layout: auto; }
+    table.g th {
+      font-size: .68rem; color: var(--muted); font-weight: 600; text-align: center;
+      padding: 0 .15rem .3rem;
+    }
+    table.g th.now { color: #c4b5fd; }
+    table.g td.name {
+      width: 11.5rem; font-size: .8rem; font-weight: 700; white-space: nowrap;
+      padding-right: .85rem; vertical-align: middle;
+    }
+    table.g td.name small {
+      display: block; font-weight: 500; color: var(--muted); font-size: .68rem; margin-top: .1rem;
+    }
+    table.g tr.on-gpu td.name { color: #67e8f9; }
+    table.g tr.decoding td.name { color: #e9d5ff; }
+    .who {
+      display: inline-block; width: .55rem; height: .55rem; border-radius: 50%;
+      margin-right: .35rem; vertical-align: 1px;
+    }
+    .cell {
+      width: 2.35rem; height: 2.35rem; border-radius: .4rem;
+      background: #0b1220; border: 1px solid #1e293b;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 700; color: transparent;
+    }
+    .cell.P { background: #0e7490; border-color: #67e8f9; color: #ecfeff; }
+    .cell.D { background: #6d28d9; border-color: #c4b5fd; color: #ede9fe; }
+    .cell.B {
+      background: repeating-linear-gradient(135deg, #1e293b, #1e293b 4px, #334155 4px, #334155 8px);
+      border-color: #64748b; color: #cbd5e1;
+    }
+    .cell.F { background: #0f291c; border-color: #14532d; color: #86efac; }
+    .cell.W { color: #334155; }
+    .s { color: var(--green); }
+    .m { color: var(--amber); }
+    .l { color: #fca5a5; }
+
+    .viz { width: max-content; max-width: 100%; }
+    .viz .cmp, .viz .gantt { width: 100%; }
+    .cmp {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .85rem; padding: .85rem 1rem; margin-bottom: 1rem;
+    }
+    .cmp-row {
+      position: relative; min-height: 2.55rem; margin: .28rem 0; padding: .2rem 0;
+      border-radius: .5rem; cursor: pointer; border: 1px solid transparent;
+    }
+    .cmp-row.cur { border-color: rgba(167,139,250,.45); background: rgba(139,92,246,.1); }
+    .cmp-lab {
+      position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+      width: 11.5rem; font-size: .8rem; font-weight: 700; color: #cbd5e1; padding-right: .85rem;
+      box-sizing: border-box;
+    }
+    .cmp-lab small { display: block; font-weight: 500; color: var(--muted); font-size: .68rem; margin-top: .1rem; }
+    .cmp-row.cur .cmp-lab { color: #e9d5ff; }
+    .cmp-track {
+      height: 1.15rem; background: #0b1220; border-radius: 999px;
+      border: 1px solid #243044; position: relative; overflow: visible;
+    }
+    .cmp-fill {
+      height: 100%; border-radius: 999px; background: #3f3f6b; position: relative;
+    }
+    .cmp-row.cur .cmp-fill { background: #7c3aed; }
+    .cmp-row.hit .cmp-fill { background: #8b5cf6; }
+    .cmp-end {
+      position: absolute; left: 100%; top: 50%; transform: translateY(-50%);
+      font-size: .68rem; font-weight: 700; color: #c4b5fd; white-space: nowrap;
+      padding-left: .4rem;
+    }
+    .cmp-row.cur .cmp-end { color: #ede9fe; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: .75rem; font-size: .75rem; color: var(--muted); margin: .7rem 0 1rem; }
+    .legend i { display: inline-block; width: .85rem; height: .85rem; border-radius: .2rem; margin-right: .25rem; vertical-align: -2px; }
+    .links { margin-top: 1rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>短请求被挡住了：静态批 / 连续批 / chunk</h1>
+    <p class="lead">
+      竖着四行是四个用户。对照条和下面时间表同一根时间轴：条停在哪一列，S1 的第一个字就在那一拍。
+      格子：<strong>算</strong> = 在算 prompt，<strong>吐</strong> = 在吐字，<strong>首</strong> = 这一行的第一个字。
+    </p>
+    <div class="legend">
+      <span><i style="background:#0e7490"></i>算 · 在算 prompt</span>
+      <span><i style="background:#6d28d9"></i>吐 · 在吐字（首 = 第一个字）</span>
+      <span><i style="background:#334155;background-image:repeating-linear-gradient(135deg,#1e293b,#1e293b 4px,#334155 4px,#334155 8px)"></i>空 · 不占用 GPU</span>
+      <span><i style="background:#0f291c;border:1px solid #14532d"></i>完 · 这条结束</span>
+    </div>
+    <div class="controls">
+      <div class="mode" id="mode">
+        <button class="on" data-m="static">静态批</button>
+        <button data-m="hog">连续批（长 Prefill 独占）</button>
+        <button data-m="chunk">连续批 + chunk</button>
+      </div>
+      <button class="btn-next" id="btnNext">下一步</button>
+      <button id="btnAuto">自动播放</button>
+      <button id="btnReset">重置</button>
+    </div>
+    <div class="status"><span class="lbl">STEP 0</span><p id="cap"></p></div>
+
+    <div class="viz">
+      <div class="cmp">
+        <h2>对照：S1 短请求的第一个字出现在第几拍（越早越好）</h2>
+        <p class="hint">条的长度对齐下面时间表的列。点一行可切换调度。</p>
+        <div id="ttftBars"></div>
+      </div>
+
+      <div class="gantt">
+        <h2>时间表。紫框 = 当前这一拍，也就是这一块 GPU。「首」= 这一行的第一个字</h2>
+        <div class="gantt-board" id="ganttBoard">
+          <div class="scan" id="scan"><span class="scan-lab">一块 GPU</span></div>
+          <table class="g" id="gantt"></table>
+        </div>
+      </div>
+    </div>
+
+    <p class="links">
+      抢占换出见 <a href="cacheschedule.html">cacheschedule.html</a>。
+      PD 分离后这条循环发生在 Decode 侧，见 <a href="kvpd.html">kvpd.html</a>。
+    </p>
+  </div>
+  <script src="nav.js"></script>
+  <script>
+    const NAMES = [
+      { id: "S1", cls: "s", color: "#34d399", label: "S1 短请求", sub: "用户甲 · prompt ~1.5k" },
+      { id: "S2", cls: "s", color: "#6ee7b7", label: "S2 短请求", sub: "用户乙 · prompt ~1.5k" },
+      { id: "M1", cls: "m", color: "#e8a317", label: "M1 中请求", sub: "用户丙 · prompt ~16k" },
+      { id: "L1", cls: "l", color: "#fca5a5", label: "L1 长请求", sub: "用户丁 · prompt ~80k" }
+    ];
+
+    const MODES = [
+      { id: "static", label: "静态批", sub: "整批凑齐才吐字" },
+      { id: "hog", label: "连续批 · 长 Prefill 独占", sub: "不切块，短请求照样等" },
+      { id: "chunk", label: "连续批 + chunk", sub: "每拍只切一块长 Prefill" }
+    ];
+
+    const CELL_TXT = { P: "算", D: "吐", B: "空", F: "完", W: "" };
+    const CELL_TIP = { P: "在算 prompt", D: "在吐字", B: "不占用 GPU", F: "已结束", W: "还没开始" };
+    const SCHED = {
+      static: [
+        { S1: "P", S2: "P", M1: "P", L1: "P" },
+        { S1: "B", S2: "B", M1: "P", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "D", S2: "D", M1: "D", L1: "D" },
+        { S1: "D", S2: "D", M1: "D", L1: "D" },
+        { S1: "D", S2: "D", M1: "D", L1: "D" },
+        { S1: "D", S2: ".", M1: ".", L1: "." }
+      ],
+      hog: [
+        { S1: "P", S2: "B", M1: "B", L1: "B" },
+        { S1: "B", S2: "P", M1: "B", L1: "B" },
+        { S1: "B", S2: "B", M1: "P", L1: "B" },
+        { S1: "B", S2: "B", M1: "P", L1: "B" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "B", S2: "B", M1: "B", L1: "P" },
+        { S1: "D", S2: "D", M1: "D", L1: "D" },
+        { S1: "D", S2: "D", M1: "D", L1: "D" },
+        { S1: "D", S2: "D", M1: "D", L1: "D" },
+        { S1: "D", S2: ".", M1: ".", L1: "." }
+      ],
+      chunk: [
+        { S1: "P", S2: ".", M1: ".", L1: "." },
+        { S1: "D", S2: "P", M1: ".", L1: "." },
+        { S1: "D", S2: "D", M1: "P", L1: "." },
+        { S1: "D", S2: "D", M1: "P", L1: "." },
+        { S1: "D", S2: "D", M1: "D", L1: "P" },
+        { S1: ".", S2: ".", M1: "D", L1: "P" },
+        { S1: ".", S2: ".", M1: "D", L1: "P" },
+        { S1: ".", S2: ".", M1: ".", L1: "P" },
+        { S1: ".", S2: ".", M1: ".", L1: "P" },
+        { S1: ".", S2: ".", M1: ".", L1: "P" },
+        { S1: ".", S2: ".", M1: ".", L1: "D" },
+        { S1: ".", S2: ".", M1: ".", L1: "D" },
+        { S1: ".", S2: ".", M1: ".", L1: "D" }
+      ]
+    };
+
+    const INTRO = {
+      static: "静态批：四条必须凑齐。L 的 Prefill 没跑完，S 就算算完了也不占用 GPU，一步都吐不出来。",
+      hog: "连续批但长 Prefill 不切块：GPU 一次只做一件 Prefill。S1 第一步就算完，也要等 S2、M、L 全部 Prefill 结束才吐字。",
+      chunk: "连续批 + chunk：每步只切一块长 Prefill，腾出来的位置给已经 ready 的短请求 Decode。看 S1 的第一个紫点。"
+    };
+
+    const BEAT = {
+      static: [
+        "四条一起进 Prefill。下面 GPU 叠了四块青：这一拍四个人都在算。",
+        "S 已经 pref 完，但整批还在等 M/L → 斜线，不占用 GPU。GPU 上只剩 M、L 的青块。",
+        "只剩 L 还在算。S 的用户此时已经等了 3 步，一个字都没有。",
+        "L 继续独占这块 GPU。S1/S2/M1 是斜线：不占用 GPU。",
+        "L 继续独占。",
+        "L 最后一块 Prefill。S 被挡了 5 步。",
+        "整批才开始 Decode。S1 第一个紫点出现——这就是 TTFT 被拉长。",
+        "大家一起吐字：GPU 上四块小紫，对应四行的「吐」。",
+        "继续 Decode。",
+        "S1 还在吐最后一字；S2/M1/L1 已打勾结束。"
+      ],
+      hog: [
+        "FCFS：先给 S1 做 Prefill。GPU 上只有 S1；其他人斜线，不占用 GPU。",
+        "S1 想 Decode，但调度去给 S2 Prefill → S1 被挡，GPU 换成 S2 的青块。",
+        "轮到 M 的 Prefill。短请求继续等。",
+        "M 第二块。",
+        "L 开始 6 块 Prefill。从这一步起 GPU 全是 L1 的青块。",
+        "L 独占。S 想 Decode，但这一拍是斜线：不占用 GPU。",
+        "L 独占。",
+        "L 独占。",
+        "L 独占。",
+        "L 最后一块。短请求已经空等了整段长上下文。",
+        "这才开始一起 Decode。连续批如果碰上不切块的巨兽，和静态批差不多。",
+        "吐字。",
+        "吐字。",
+        "S1 结束。"
+      ],
+      chunk: [
+        "S1 先 Prefill（1 步就完）。GPU 上只有 S1。",
+        "S1 吐出第 1 个 token（紫）。同时 S2 Prefill。短请求的 TTFT 在这里。",
+        "S1、S2 都在 Decode；M 开始 Prefill。GPU 上青+紫叠在一起。",
+        "M 第二块 Prefill，短请求继续吐字。",
+        "L 插入，但只占一块 chunk；S1 吐完最后一个字。",
+        "L chunk + M Decode。S1/S2 已打勾离开。",
+        "L chunk + M Decode。",
+        "只剩 L 的 chunk。短请求已经走完，不再被挡。",
+        "L chunk。",
+        "L 最后一块 Prefill。",
+        "L 开始 Decode。",
+        "L Decode。",
+        "L 结束。短请求的 P90 已经好了；集群 TPM 仍主要由 L 决定。"
+      ]
+    };
+
+    let mode = "static";
+    let t = 0;
+    let timer = null;
+
+    function sched() { return SCHED[mode]; }
+    function maxT() { return sched().length; }
+    function axisLen() {
+      return Math.max.apply(null, Object.keys(SCHED).map(function (k) { return SCHED[k].length; }));
+    }
+
+    function firstDecodeOf(modeId, reqId) {
+      const s = SCHED[modeId];
+      for (let i = 0; i < s.length; i++) if (s[i][reqId] === "D") return i;
+      return -1;
+    }
+    function firstDecode(id) { return firstDecodeOf(mode, id); }
+
+    function phaseAt(steps, id, i) {
+      if (i >= steps.length) {
+        let seen = false;
+        for (let j = 0; j < steps.length; j++) {
+          const x = steps[j][id];
+          if (x === "P" || x === "D") seen = true;
+        }
+        return seen ? "F" : "W";
+      }
+      const k = steps[i][id] || ".";
+      if (k === "P" || k === "D" || k === "B") return k;
+      let seen = false;
+      for (let j = 0; j < i; j++) {
+        const x = steps[j][id];
+        if (x === "P" || x === "D") seen = true;
+      }
+      return seen ? "F" : "W";
+    }
+
+    function render() {
+      const s = sched();
+      const idle = t === 0;
+      const showT = idle ? -1 : t - 1;
+
+      document.querySelector(".status .lbl").textContent =
+        idle ? "STEP 0" : ("STEP " + t + " / " + s.length);
+      document.getElementById("cap").textContent =
+        idle ? INTRO[mode] : (BEAT[mode][showT] || INTRO[mode]);
+      document.getElementById("btnNext").disabled = t >= s.length;
+
+      const cols = axisLen();
+      const table = document.getElementById("gantt");
+      let head = "<tr><th>四个用户</th>";
+      for (let i = 0; i < cols; i++) head += "<th" + (i === showT ? ' class="now"' : "") + ">" + i + "</th>";
+      head += "</tr>";
+      let body = "";
+      NAMES.forEach(n => {
+        const ph = idle ? "_" : phaseAt(s, n.id, showT);
+        const rowCls = ph === "P" ? "on-gpu" : ph === "D" ? "decoding" : "";
+        body += '<tr class="user ' + rowCls + '"><td class="name ' + n.cls + '">';
+        body += '<span class="who" style="background:' + n.color + '"></span>' + n.label;
+        body += "<small>" + n.sub + "</small></td>";
+        const fd = firstDecode(n.id);
+        for (let i = 0; i < cols; i++) {
+          const k = idle ? "W" : phaseAt(s, n.id, i);
+          const isFirst = (!idle && k === "D" && i === fd);
+          const txt = isFirst ? "首" : (CELL_TXT[k] || "");
+          const tip = isFirst ? "第一个字（TTFT）" : (CELL_TIP[k] || "");
+          body += '<td><div class="cell ' + k + '" data-col="' + i + '" title="' + n.id + " · " + tip + '">' + txt + "</div></td>";
+        }
+        body += "</tr>";
+      });
+      table.innerHTML = head + body;
+      renderTtft();
+      placeScan();
+      layoutCmp();
+    }
+
+    function renderTtft() {
+      const cols = axisLen();
+      const showT = t === 0 ? -1 : t - 1;
+      document.getElementById("ttftBars").innerHTML = MODES.map(m => {
+        const fd = firstDecodeOf(m.id, "S1");
+        const cur = m.id === mode;
+        const hit = t > 0 && cur && showT >= fd;
+        return '<div class="cmp-row' + (cur ? " cur" : "") + (hit ? " hit" : "") + '" data-m="' + m.id + '" data-fd="' + fd + '">' +
+          '<div class="cmp-lab">' + m.label + "<small>" + m.sub + "</small></div>" +
+          '<div class="cmp-track"><div class="cmp-fill"><span class="cmp-end">第 ' + fd + " 拍" + (hit ? " · 已出字" : "") + "</span></div></div></div>";
+      }).join("");
+    }
+
+    function layoutCmp() {
+      const table = document.getElementById("gantt");
+      const cols = axisLen();
+      const first = table.querySelector('.cell[data-col="0"]');
+      const last = table.querySelector('.cell[data-col="' + (cols - 1) + '"]');
+      if (!first || !last) return;
+      requestAnimationFrame(() => {
+        const a = first.getBoundingClientRect();
+        const b = last.getBoundingClientRect();
+        const trackW = b.right - a.left;
+        document.querySelectorAll(".cmp-row").forEach(row => {
+          const fd = parseInt(row.getAttribute("data-fd"), 10);
+          const end = table.querySelector('.cell[data-col="' + fd + '"]');
+          const fillW = end ? (end.getBoundingClientRect().right - a.left) : trackW * (fd + 1) / cols;
+          const track = row.querySelector(".cmp-track");
+          const fill = row.querySelector(".cmp-fill");
+          const left = a.left - row.getBoundingClientRect().left;
+          track.style.marginLeft = Math.max(0, left) + "px";
+          track.style.width = Math.max(0, trackW) + "px";
+          // 第 1 拍条偏长一列，只缩短这一条；第 6 / 10 不动
+          const w = (fd === 1 && end)
+            ? Math.max(0, end.getBoundingClientRect().left - a.left)
+            : fillW;
+          fill.style.width = Math.max(0, w) + "px";
+        });
+      });
+    }
+
+    function placeScan() {
+      const scan = document.getElementById("scan");
+      const board = document.getElementById("ganttBoard");
+      const idle = t === 0;
+      const showT = idle ? -1 : t - 1;
+      if (idle || showT < 0) {
+        scan.classList.remove("on");
+        return;
+      }
+      const cells = document.querySelectorAll('#gantt tr.user .cell[data-col="' + showT + '"]');
+      if (cells.length < 2) {
+        scan.classList.remove("on");
+        return;
+      }
+      const firstShow = !scan.classList.contains("on");
+      const layout = () => {
+        const br = board.getBoundingClientRect();
+        const a = cells[0].getBoundingClientRect();
+        const b = cells[cells.length - 1].getBoundingClientRect();
+        const padX = 7, padTop = 26, padBot = 8;
+        if (firstShow) scan.style.transition = "none";
+        scan.style.left = (a.left - br.left - padX) + "px";
+        scan.style.top = (a.top - br.top - padTop) + "px";
+        scan.style.width = (a.width + padX * 2) + "px";
+        scan.style.height = (b.bottom - a.top + padTop + padBot) + "px";
+        scan.classList.add("on");
+        if (firstShow) {
+          scan.offsetHeight;
+          scan.style.transition = "";
+        }
+      };
+      requestAnimationFrame(layout);
+    }
+
+    function next() {
+      if (t < maxT()) {
+        t++;
+        if (t >= maxT()) stopAuto();
+        render();
+      } else stopAuto();
+    }
+    function stopAuto() {
+      if (timer) { clearInterval(timer); timer = null; }
+      document.getElementById("btnAuto").classList.remove("on");
+      document.getElementById("btnAuto").textContent = "自动播放";
+    }
+    function resetKeepMode() {
+      stopAuto();
+      t = 0;
+      render();
+    }
+    document.getElementById("mode").addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      document.querySelectorAll("#mode button").forEach(b => b.classList.toggle("on", b === btn));
+      mode = btn.dataset.m;
+      resetKeepMode();
+    });
+    document.getElementById("ttftBars").addEventListener("click", (e) => {
+      const row = e.target.closest("[data-m]");
+      if (!row) return;
+      document.querySelectorAll("#mode button").forEach(b => b.classList.toggle("on", b.dataset.m === row.dataset.m));
+      mode = row.dataset.m;
+      resetKeepMode();
+    });
+    document.getElementById("btnNext").onclick = next;
+    document.getElementById("btnReset").onclick = resetKeepMode;
+    document.getElementById("btnAuto").onclick = () => {
+      if (timer) { stopAuto(); return; }
+      if (t >= maxT()) resetKeepMode();
+      document.getElementById("btnAuto").classList.add("on");
+      document.getElementById("btnAuto").textContent = "停止";
+      timer = setInterval(next, 1100);
+    };
+    render();
+    window.addEventListener("resize", function () { placeScan(); layoutCmp(); });
+    if (window.ResizeObserver) new ResizeObserver(function () { placeScan(); layoutCmp(); }).observe(document.getElementById("ganttBoard"));
+  </script>
+</body>
+</html>
