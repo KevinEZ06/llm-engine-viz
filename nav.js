@@ -2,11 +2,12 @@
   if (document.getElementById("viz-nav")) return;
 
   var pages = [
-    { href: "index.html", label: "Radix" },
+    { href: "index.html", label: "总览" },
+    { href: "journey.html", label: "全链路" },
+    { href: "batching.html", label: "连续批" },
+    { href: "radix.html", label: "Radix" },
     { href: "PagedAttention.html", label: "Paged KV" },
     { href: "cacheschedule.html", label: "KV 调度" },
-    { href: "batching.html", label: "连续批" },
-    { href: "journey.html", label: "全链路" },
     { href: "eagle3.html", label: "EAGLE-3" },
     { href: "kvpd.html", label: "PD 分离" },
     { href: "pipeline.html", label: "路由" },
@@ -16,7 +17,7 @@
   ];
 
   var file = (location.pathname.split("/").pop() || "index.html");
-  if (!file || file === "") file = "index.html";
+  if (!file) file = "index.html";
 
   var style = document.createElement("style");
   style.textContent = [
@@ -36,7 +37,7 @@
     var a = document.createElement("a");
     a.href = p.href;
     a.textContent = p.label;
-    if (p.href === file || (file === "index.html" && p.href === "index.html")) a.className = "on";
+    if (p.href === file) a.className = "on";
     if (file === "eagle_3.html" && p.href === "eagle3.html") a.className = "on";
     nav.appendChild(a);
   });
