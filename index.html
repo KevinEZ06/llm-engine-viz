@@ -38,15 +38,6 @@
       border-radius: .7rem; padding: .75rem 1rem; margin-bottom: 1.15rem;
       color: #dbeafe; font-size: .88rem; line-height: 1.5;
     }
-    .tabs {
-      display: flex; gap: .35rem; margin: 0 0 .85rem;
-      border: 1px solid var(--border); border-radius: .55rem; padding: .2rem; width: fit-content;
-    }
-    .tabs button {
-      border: none; border-radius: .45rem; padding: .4rem .85rem;
-      background: transparent; color: var(--muted); font-weight: 700; cursor: pointer;
-    }
-    .tabs button.on { background: #1c3358; color: #dbeafe; }
     h2 { margin: 1.35rem 0 .55rem; font-size: .9rem; color: var(--muted); font-weight: 600; }
     .path {
       display: flex; flex-wrap: wrap; gap: .4rem; align-items: stretch;
@@ -104,17 +95,15 @@
       <a href="https://datawhalechina.github.io/zero-to-sglang/">课程正文</a>。
       教程现在<strong>只有 Part I 写完</strong>（I.3 / I.5 仍在更新），Part II–IV 几乎还是占位。
     </p>
-    <div class="tabs" id="tabs">
-      <button class="on" data-track="zts">跟 zero-to-sglang</button>
-      <button data-track="infra">跟 AI Infra 课表</button>
+    <div class="note">
+      点路径上的盒子，按 Part I → 已有引擎页往下走。I.2 Roofline、I.3 GPU 还没有动画，请先读正文。原来的首页 Radix 在 <a href="radix.html" style="color:#93c5fd">radix.html</a>。
     </div>
-    <div class="note" id="note"></div>
 
-    <h2 id="pathTitle">按教程顺序打开的页</h2>
+    <h2>按教程顺序打开的页</h2>
     <div class="path" id="path"></div>
     <div class="detail" id="detail"></div>
 
-    <h2 id="listTitle">主题 → 本仓库页面</h2>
+    <h2>主题 → 本仓库页面</h2>
     <div class="lessons" id="lessons"></div>
 
     <p class="foot">
@@ -129,53 +118,6 @@
       i4: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC4%E7%AB%A0_%E6%8E%A8%E7%90%86%E7%9A%84%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%85%A5%E9%97%A8.md",
       i5: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC5%E7%AB%A0_Benchmark%E5%85%A5%E9%97%A8.md"
     };
-
-    const INFRA_STOPS = [
-      {
-        k: "网关 / Proxy", s: "全链路",
-        cap: "客户端只打 Proxy。K8s 做发现，不解析 token。",
-        href: "journey.html", go: "打开全链路"
-      },
-      {
-        k: "选 P / D", s: "多 PD 调度",
-        cap: "路由按容量和前缀匹配把请求分到 Prefill 或 Decode 池。这是 III.5 分卡，不是第 2 章同卡两阶段。",
-        href: "pipeline.html", go: "打开 SMG 路由",
-        href2: "kvpd.html", go2: "KVPoll"
-      },
-      {
-        k: "Prefill 池", s: "III.5",
-        cap: "P 侧把 prompt 算完，产出请求级 KV，再交给 Decode 池。",
-        href: "kvpd.html", go: "打开 PD 分离"
-      },
-      {
-        k: "KV 交接", s: "Mooncake",
-        cap: "搬的是这一条请求的 KV，不是整棵前缀树。",
-        href: "k8s.html", go: "打开 K8s / Mooncake"
-      },
-      {
-        k: "Decode 连续批", s: "I.5 / II.6",
-        cap: "短请求会被长 Prefill 挡住。门外排队人数 = 尾延迟；空窗补人 = Continuous Batching。并发升高吞吐，TTFT/P99 和 Goodput 可能变差。",
-        href: "batching.html", go: "打开连续批"
-      },
-      {
-        k: "层内切分", s: "四维切分",
-        cap: "一张卡干不完时，看切的是隐层、数据、专家还是序列。",
-        href: "parallel.html", go: "打开 TP/DP/EP",
-        href2: "ring_attention.html", go2: "Ring / CP"
-      },
-      {
-        k: "KV Cache", s: "I.4 → II.7/8",
-        cap: "分页存块、前缀树复用、显存不够时 Swap / Recompute。",
-        href: "radix.html", go: "Radix 前缀树",
-        href2: "PagedAttention.html", go2: "Paged KV"
-      },
-      {
-        k: "推测解码", s: "II.10",
-        cap: "草稿树展开，目标模型一次验证，接受最长前缀。",
-        href: "eagle3.html", go: "打开 EAGLE-3",
-        href2: "eagle_3.html", go2: "自动播放"
-      }
-    ];
 
     const ZTS_STOPS = [
       {
@@ -220,19 +162,6 @@
       }
     ];
 
-    const INFRA_LESSONS = [
-      { tag: "全链路", ok: true, title: "全链路", why: "网关到吐字经过哪些盒子", links: [["journey.html", "journey"]] },
-      { tag: "Att / MLP", ok: false, title: "Att / MLP", why: "一层在算什么（Roofline）——对齐教程 I.2 / I.3，尚未做", links: [] },
-      { tag: "四维切分", ok: true, title: "四维切分", why: "切轴与通信：TP / DP / EP / CP", links: [["parallel.html", "parallel"], ["ring_attention.html", "Ring"]] },
-      { tag: "并行配方", ok: true, title: "并行配方", why: "先装下再复制；Prefill / Decode 配方可以不同", links: [["parallel.html", "parallel"]] },
-      { tag: "Cache", ok: true, title: "Cache", why: "前缀树、分页、淘汰与抢占", links: [["radix.html", "Radix"], ["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
-      { tag: "MTP / 推测解码", ok: true, title: "MTP / 推测解码", why: "draft → verify → accept", links: [["eagle3.html", "eagle3"], ["eagle_3.html", "自动播"]] },
-      { tag: "PD 配比", ok: false, title: "PD 配比", why: "扩 P 还是扩 D（暂未做）", links: [] },
-      { tag: "多 PD 调度", ok: true, title: "多 PD 调度", why: "Proxy 选机 + 匹配分", links: [["pipeline.html", "路由"], ["journey.html", "全链路"]] },
-      { tag: "K8s", ok: true, title: "K8s", why: "声明式生命周期与全局 KV", links: [["k8s.html", "k8s"]] },
-      { tag: "倒果为因", ok: true, title: "倒果为因", why: "从 SLO / TTFT 反推调度：头阻塞", links: [["batching.html", "连续批"], ["cacheschedule.html", "抢占"]] }
-    ];
-
     const ZTS_LESSONS = [
       { tag: "I.1", ok: false, title: "LLM 入门", why: "Transformer / 自回归。不计划可视化。", links: [], skip: true },
       { tag: "I.2", ok: false, title: "推理入门", why: "同卡 Prefill vs Decode、compute/memory-bound、Roofline。现有页没有这一层。", links: [["https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC2%E7%AB%A0_%E6%8E%A8%E7%90%86%E5%85%A5%E9%97%A8.md", "读正文"]] },
@@ -248,29 +177,16 @@
       { tag: "III.5", ok: true, title: "PD Disaggregation", why: "分卡 + KVPoll。不是 I.2。", links: [["kvpd.html", "KVPoll"], ["pipeline.html", "路由"]] }
     ];
 
-    let track = "zts";
     let cur = 0;
 
-    function stops() { return track === "zts" ? ZTS_STOPS : INFRA_STOPS; }
-    function lessons() { return track === "zts" ? ZTS_LESSONS : INFRA_LESSONS; }
-
-    function renderNote() {
-      document.getElementById("note").innerHTML = track === "zts"
-        ? "点路径上的盒子，按 Part I → 已有引擎页往下走。I.2 Roofline、I.3 GPU 还没有动画，请先读正文。原来的首页 Radix 在 <a href=\"radix.html\" style=\"color:#93c5fd\">radix.html</a>。"
-        : "由外向内：网关 → 选机 → Prefill 池 / Decode 池 → 切分 → cache。点盒子看这一站。Radix 在 <a href=\"radix.html\" style=\"color:#93c5fd\">radix.html</a>。";
-      document.getElementById("pathTitle").textContent = track === "zts" ? "按教程顺序打开的页" : "请求走过的站";
-      document.getElementById("listTitle").textContent = "主题 → 本仓库页面";
-    }
     function renderPath() {
-      const list = stops();
-      if (cur >= list.length) cur = 0;
-      document.getElementById("path").innerHTML = list.map((n, i) => {
+      document.getElementById("path").innerHTML = ZTS_STOPS.map((n, i) => {
         const btn = '<button class="node' + (i === cur ? " on" : "") + '" data-i="' + i + '"><span class="k">' + n.k + "</span><span class=\"s\">" + n.s + "</span></button>";
         return i ? '<span class="arrow">→</span>' + btn : btn;
       }).join("");
     }
     function renderDetail() {
-      const n = stops()[cur];
+      const n = ZTS_STOPS[cur];
       let html = '<span class="lbl">' + n.k + "</span><p>" + n.cap + "</p>";
       html += '<a class="go" href="' + n.href + '">' + n.go + "</a>";
       if (n.href2) html += '<a class="go alt" href="' + n.href2 + '">' + n.go2 + "</a>";
@@ -278,19 +194,13 @@
       document.getElementById("detail").innerHTML = html;
     }
     function renderLessons() {
-      document.getElementById("lessons").innerHTML = lessons().map(L => {
+      document.getElementById("lessons").innerHTML = ZTS_LESSONS.map(L => {
         const links = L.links.length
           ? L.links.map(x => '<a href="' + x[0] + '"' + (x[0].indexOf("http") === 0 ? ' target="_blank" rel="noopener"' : "") + ">" + x[1] + "</a>").join("")
           : "<span class=\"tag wait\">暂缓</span>";
         const flag = L.skip ? "<span class=\"wait\">不计划</span>" : (L.ok ? "<em>已有</em>" : "<span class=\"wait\">没有</span>");
         return '<div class="card' + (L.ok ? "" : " miss") + '"><div class="tag">' + L.tag + " · " + flag + "</div><strong>" + L.title + "</strong><p>" + L.why + '</p><div class="links">' + links + "</div></div>";
       }).join("");
-    }
-    function paint() {
-      renderNote();
-      renderPath();
-      renderDetail();
-      renderLessons();
     }
 
     document.getElementById("path").addEventListener("click", e => {
@@ -300,15 +210,9 @@
       renderPath();
       renderDetail();
     });
-    document.getElementById("tabs").addEventListener("click", e => {
-      const btn = e.target.closest("[data-track]");
-      if (!btn) return;
-      document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b === btn));
-      track = btn.dataset.track;
-      cur = 0;
-      paint();
-    });
-    paint();
+    renderPath();
+    renderDetail();
+    renderLessons();
   </script>
 </body>
 </html>
