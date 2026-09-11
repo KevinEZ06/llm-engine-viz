@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>llm-engine-viz · 一个请求怎么落地</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #152033;
+      --border: #2a3a52;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --blue: #5b9fff;
+      --blue-btn: #2f6fed;
+      --amber: #e8a317;
+      --green: #3ecf8e;
+      --red: #f85149;
+      --violet: #bc8cff;
+      --cyan: #22d3ee;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; min-height: 100%;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .page { max-width: 72rem; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
+    h1 {
+      margin: 0 0 .35rem; font-size: 1.45rem;
+      background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lead { margin: 0 0 1rem; color: var(--muted); font-size: .92rem; line-height: 1.55; }
+    .lead a { color: var(--blue); }
+    .note {
+      background: rgba(30,58,95,.35); border: 1px solid rgba(91,159,255,.28);
+      border-radius: .7rem; padding: .75rem 1rem; margin-bottom: 1.15rem;
+      color: #dbeafe; font-size: .88rem; line-height: 1.5;
+    }
+    h2 { margin: 1.35rem 0 .55rem; font-size: .9rem; color: var(--muted); font-weight: 600; }
+    .path {
+      display: flex; flex-wrap: wrap; gap: .4rem; align-items: stretch;
+      margin-bottom: .85rem;
+    }
+    .node {
+      flex: 1 1 7.2rem; min-width: 7.2rem; max-width: 11rem;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .65rem; padding: .55rem .65rem; cursor: pointer;
+      text-align: left; color: inherit; font: inherit;
+    }
+    .node:hover { border-color: #3b6eb5; }
+    .node.on { border-color: var(--cyan); box-shadow: inset 3px 0 0 var(--cyan); background: #12304a; }
+    .node .k { display: block; font-size: .78rem; font-weight: 700; margin-bottom: .15rem; }
+    .node .s { display: block; font-size: .68rem; color: var(--muted); line-height: 1.35; }
+    .arrow { color: var(--amber); font-weight: 700; align-self: center; font-size: .9rem; }
+    .detail {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .85rem; padding: .9rem 1rem; min-height: 5.6rem; margin-bottom: 1.2rem;
+    }
+    .detail .lbl { color: var(--cyan); font-weight: 700; margin-right: .35rem; }
+    .detail p { margin: .2rem 0 .65rem; line-height: 1.55; color: #dbeafe; font-size: .92rem; }
+    .go {
+      display: inline-block; border: none; border-radius: .55rem;
+      padding: .4rem .8rem; font-weight: 600; cursor: pointer; color: #fff;
+      background: var(--blue-btn); text-decoration: none; font-size: .85rem;
+    }
+    .go.alt { background: #334155; margin-left: .4rem; }
+    .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: .65rem; }
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .75rem; padding: .75rem .85rem; display: flex; flex-direction: column; gap: .35rem;
+    }
+    .card.miss { opacity: .62; }
+    .card .tag { font-size: .68rem; color: var(--muted); letter-spacing: .04em; }
+    .card .tag em { font-style: normal; color: var(--green); }
+    .card .tag .wait { color: var(--amber); }
+    .card strong { font-size: .88rem; }
+    .card p { margin: 0; font-size: .75rem; color: var(--muted); line-height: 1.45; flex: 1; }
+    .card .links { margin-top: .25rem; display: flex; flex-wrap: wrap; gap: .35rem; }
+    .card a {
+      font-size: .72rem; color: var(--blue); text-decoration: none;
+      border: 1px solid #2a4a72; border-radius: 999px; padding: .15rem .5rem;
+    }
+    .card a:hover { background: #1c3358; }
+    .foot { margin-top: 1.4rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+    .foot a { color: var(--blue); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>一个请求怎么落地</h1>
+    <p class="lead">
+      按 <a href="https://www.wolai.com/hnKyMNfcFHgFn33bS7uH6R">AI Infra 课表</a> 由外向内串：
+      网关 → 选机 → Prefill / Decode → 层内切分 → cache → 推测解码。
+      <a href="https://datawhalechina.github.io/zero-to-sglang/">zero-to-sglang</a> 是反过来的，由内向外手搓引擎；同一页可以当两门课的引子。
+    </p>
+    <div class="note">点路径上的盒子，看这一站讲什么、该打开哪一页。原来的首页是 Radix 树，已挪到 <a href="radix.html" style="color:#93c5fd">radix.html</a>。</div>
+
+    <h2>请求走过的站</h2>
+    <div class="path" id="path"></div>
+    <div class="detail" id="detail"></div>
+
+    <h2>AI Infra 课表 → 本仓库</h2>
+    <div class="lessons" id="lessons"></div>
+
+    <p class="foot">
+      课表「2.可视化」另链 <a href="https://abatom.github.io/inferflux/pd-disagg.html">inferflux PD 分离</a>，和 <a href="kvpd.html">kvpd.html</a> 是同一层问题的不同画法。
+      章节对照见 <a href="https://github.com/KevinEZ06/llm-engine-viz">README</a>。许可 CC BY-NC-SA 4.0。
+    </p>
+  </div>
+  <script src="nav.js"></script>
+  <script>
+    const STOPS = [
+      {
+        k: "网关 / Proxy", s: "lesson1",
+        cap: "客户端只打 Proxy。K8s 做发现，不解析 token。",
+        href: "journey.html", go: "打开全链路"
+      },
+      {
+        k: "选 P / D", s: "lesson6",
+        cap: "路由按容量和前缀匹配把请求分到 Prefill 或 Decode 池。",
+        href: "pipeline.html", go: "打开 SMG 路由",
+        href2: "kvpd.html", go2: "KVPoll"
+      },
+      {
+        k: "Prefill", s: "算 prompt",
+        cap: "P 侧把 prompt 算完，产出请求级 KV，再交给 Decode。",
+        href: "kvpd.html", go: "打开 PD 分离"
+      },
+      {
+        k: "KV 交接", s: "Mooncake",
+        cap: "搬的是这一条请求的 KV，不是整棵前缀树。",
+        href: "k8s.html", go: "打开 K8s / Mooncake"
+      },
+      {
+        k: "Decode 连续批", s: "lesson8",
+        cap: "短请求的第一个字会不会被长 Prefill 挡住，看调度怎么组 batch。",
+        href: "batching.html", go: "打开连续批"
+      },
+      {
+        k: "层内切分", s: "lesson3",
+        cap: "一张卡干不完时，看切的是隐层、数据、专家还是序列。",
+        href: "parallel.html", go: "打开 TP/DP/EP",
+        href2: "ring_attention.html", go2: "Ring / CP"
+      },
+      {
+        k: "KV Cache", s: "lesson4.1",
+        cap: "分页存块、前缀树复用、显存不够时 Swap / Recompute。",
+        href: "radix.html", go: "Radix 前缀树",
+        href2: "PagedAttention.html", go2: "Paged KV"
+      },
+      {
+        k: "推测解码", s: "lesson4.2",
+        cap: "草稿树展开，目标模型一次验证，接受最长前缀。",
+        href: "eagle3.html", go: "打开 EAGLE-3",
+        href2: "eagle_3.html", go2: "自动播放"
+      }
+    ];
+
+    const LESSONS = [
+      { tag: "lesson1", ok: true, title: "全链路", why: "网关到吐字经过哪些盒子", links: [["journey.html", "journey"]] },
+      { tag: "lesson2", ok: false, title: "Att / MLP", why: "一层在算什么（Roofline）", links: [] },
+      { tag: "lesson3", ok: true, title: "四维切分", why: "切轴与通信：TP / DP / EP / CP", links: [["parallel.html", "parallel"], ["ring_attention.html", "Ring"]] },
+      { tag: "lesson4", ok: true, title: "并行配方", why: "先装下再复制；Prefill / Decode 配方可以不同", links: [["parallel.html", "parallel"]] },
+      { tag: "lesson4.1", ok: true, title: "Cache", why: "前缀树、分页、淘汰与抢占", links: [["radix.html", "Radix"], ["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
+      { tag: "lesson4.2", ok: true, title: "MTP / 推测解码", why: "draft → verify → accept", links: [["eagle3.html", "eagle3"], ["eagle_3.html", "自动播"]] },
+      { tag: "lesson5", ok: false, title: "PD 配比", why: "扩 P 还是扩 D（课表页仍空）", links: [] },
+      { tag: "lesson6", ok: true, title: "多 PD 调度", why: "Proxy 选机 + 匹配分", links: [["pipeline.html", "路由"], ["journey.html", "全链路"]] },
+      { tag: "lesson7", ok: true, title: "K8s", why: "声明式生命周期与全局 KV", links: [["k8s.html", "k8s"]] },
+      { tag: "lesson8", ok: true, title: "倒果为因", why: "从 SLO / TTFT 反推调度：头阻塞", links: [["batching.html", "连续批"], ["cacheschedule.html", "抢占"]] }
+    ];
+
+    let cur = 0;
+
+    function renderPath() {
+      const el = document.getElementById("path");
+      el.innerHTML = STOPS.map((n, i) => {
+        const btn = '<button class="node' + (i === cur ? " on" : "") + '" data-i="' + i + '"><span class="k">' + n.k + "</span><span class=\"s\">" + n.s + "</span></button>";
+        return i ? '<span class="arrow">→</span>' + btn : btn;
+      }).join("");
+    }
+    function renderDetail() {
+      const n = STOPS[cur];
+      let html = '<span class="lbl">' + n.k + "</span><p>" + n.cap + "</p>";
+      html += '<a class="go" href="' + n.href + '">' + n.go + "</a>";
+      if (n.href2) html += '<a class="go alt" href="' + n.href2 + '">' + n.go2 + "</a>";
+      document.getElementById("detail").innerHTML = html;
+    }
+    function renderLessons() {
+      document.getElementById("lessons").innerHTML = LESSONS.map(L => {
+        const links = L.links.length
+          ? L.links.map(x => '<a href="' + x[0] + '">' + x[1] + "</a>").join("")
+          : "<span class=\"tag wait\">暂缓</span>";
+        return '<div class="card' + (L.ok ? "" : " miss") + '"><div class="tag">' + L.tag + " · " + (L.ok ? "<em>已有</em>" : "<span class=\"wait\">没有</span>") + "</div><strong>" + L.title + "</strong><p>" + L.why + '</p><div class="links">' + links + "</div></div>";
+      }).join("");
+    }
+
+    document.getElementById("path").addEventListener("click", e => {
+      const btn = e.target.closest("[data-i]");
+      if (!btn) return;
+      cur = +btn.dataset.i;
+      renderPath();
+      renderDetail();
+    });
+    renderPath();
+    renderDetail();
+    renderLessons();
+  </script>
+</body>
+</html>
