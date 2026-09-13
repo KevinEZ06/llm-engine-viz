@@ -10,14 +10,14 @@
 
 | 页面 | 讲什么 |
 |------|--------|
-| [index.html](https://kevinez06.github.io/llm-engine-viz/) | 总串联：一个请求怎么落地，点路径进各页 |
-| [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 一个 Token 从输入到输出：网关 → K8s → P/D → 层内切分 → 流式返回 |
+| [index.html](https://kevinez06.github.io/llm-engine-viz/) | 总路径：串联所有章节内容 |
+| [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 一个 Token 从输入到输出的过程：网关 → K8s → P/D → 层内切分 → 流式返回 |
 | [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) | TP / DP / EP：QKV 切片、AllReduce、All-to-All、DP 组 |
 | [batching.html](https://kevinez06.github.io/llm-engine-viz/batching.html) | 静态批 / 连续批 / chunk：短请求的第一个字被长 Prefill 挡住 |
 | [radix.html](https://kevinez06.github.io/llm-engine-viz/radix.html) | RadixAttention：前缀树、节点加锁、LRU 淘汰 |
 | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | Paged KV Cache：逻辑块与物理页 |
 | [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | KV 调度：Swap / Recompute 抢占 |
-| [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | EAGLE-3 推测解码（自动播放） |
+| [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | 树状推测 |
 | [mtp.html](https://kevinez06.github.io/llm-engine-viz/mtp.html) | 投机解码原理 |
 | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) | Prefill / Decode 分离 + KVPoll |
 | [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) | SMG 路由打分 |
@@ -52,7 +52,7 @@
 | 14 | Part II · 7 Paged KV Cache | 🚧 | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) · [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | 分页；Swap / Recompute |
 | 15 | Part II · 8 RadixAttention | 🚧 | **已有** | [radix.html](https://kevinez06.github.io/llm-engine-viz/radix.html) | 前缀树、加锁、LRU |
 | 16 | Part II · 9 多进程与 TP | 🚧 | **已有** | [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) | QKV 切片、AllReduce；Decode 收小 TP |
-| 17 | Part II · 10 Speculative Decoding | 🚧 | **已有** | [eagle3.html](https://kevinez06.github.io/llm-engine-viz/eagle3.html) · [eagle_3.html](https://kevinez06.github.io/llm-engine-viz/eagle_3.html) | draft → verify → accept |
+| 17 | Part II · 10 Speculative Decoding | 🚧 | **已有** | [eagle3.html](https://kevinez06.github.io/llm-engine-viz/eagle3.html) · [mtp.html](https://kevinez06.github.io/llm-engine-viz/mtp.html) | draft → verify → accept |
 | 18 | Part III · 1 Attention Backends & CUDA Graph | 🚧 | 没有 | — | 尚未补充，可参考官方 https://www.sglang.io/blog/breakable-cuda-graph |
 | 19 | Part III · 2 量化 | 🚧 | 没有 | — | 未做 |
 | 20 | Part III · 3 Hierarchical Caching | 🚧 | 没有 | — | 未做 |
