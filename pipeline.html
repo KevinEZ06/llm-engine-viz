@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SMG 路由打分 · 容量 vs 匹配</title>
+    <title>选哪台机器</title>
     <style>
         :root {
             --bg: #0b0f19;
@@ -22,6 +22,8 @@
             display: flex; flex-direction: column; align-items: center; overflow-x: hidden;
         }
         .header { text-align: center; margin-bottom: 20px; }
+        .header h2 { margin: 0 0 6px; }
+        .lead { font-size: 13px; color: #aaa; line-height: 1.55; max-width: 42rem; margin: 0 auto; }
         button {
             background-color: var(--data-color); color: #000; border: none; padding: 12px 24px;
             border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold;
@@ -30,17 +32,17 @@
         button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 0 25px rgba(57, 197, 187, 0.7); }
         button:disabled { background-color: #444; color: #888; box-shadow: none; cursor: not-allowed; }
 
-        .plane-container { width: 100%; max-width: 1300px; display: flex; flex-direction: column; gap: 30px; position: relative; }
-        
+        .plane-container { width: 100%; max-width: 1300px; display: flex; flex-direction: column; gap: 36px; position: relative; overflow: visible; }
+
         .plane {
             border: 2px dashed; border-radius: 12px; padding: 25px 15px 15px 15px; position: relative;
             background: linear-gradient(90deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.2) 100%);
         }
         .plane-title {
             position: absolute; top: -14px; left: 20px; background: var(--bg); padding: 0 10px;
-            font-weight: bold; font-size: 14px; display: flex; align-items: center; gap: 8px;
+            font-weight: bold; font-size: 14px; display: flex; align-items: center; gap: 8px; z-index: 50;
         }
-        
+
         .plane-ctrl { border-color: var(--ctrl-color); }
         .plane-ctrl .plane-title { color: var(--ctrl-color); }
         .plane-data { border-color: var(--data-color); border-style: solid; box-shadow: inset 0 0 30px rgba(57, 197, 187, 0.05); }
@@ -48,72 +50,107 @@
         .plane-obs { border-color: var(--obs-color); }
         .plane-obs .plane-title { color: var(--obs-color); }
 
-        .ctrl-row { display: flex; gap: 15px; margin-left: 5%; width: 90%; justify-content: center; }
-        
-        /* 决策计分板 */
+        .ctrl-row { display: flex; gap: 56px; margin-left: 5%; width: 90%; justify-content: center; align-items: stretch; }
+        #ctrl-sync {
+            flex: 0 0 220px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            line-height: 1.55;
+            padding: 14px 12px;
+        }
+
         .decision-board {
             background: #000; border: 1px solid var(--ctrl-color); border-radius: 8px; padding: 10px 15px;
             font-family: monospace; font-size: 13px; text-align: center; color: var(--ctrl-color);
             box-shadow: 0 0 10px rgba(210,153,34,0.2); flex: 1; transition: 0.3s;
+            position: relative; z-index: 50;
         }
         .decision-board.active { background: rgba(210,153,34,0.1); box-shadow: 0 0 20px rgba(210,153,34,0.5); }
         .score-row { display: flex; justify-content: space-around; margin-top: 8px; font-weight: bold; color: #fff; font-size: 15px; }
+        .score-formula { color: #aaa; font-size: 12px; margin-top: 6px; }
 
         .data-plane-container { position: relative; display: flex; gap: 20px; align-items: center; }
         .cluster-boundary { border-right: 2px dashed #555; padding-right: 20px; display: flex; flex-direction: column; align-items: center; }
         .boundary-label { font-size: 12px; color: var(--k8s-color); margin-top: 10px; font-weight: bold; }
 
         .routing-fork { display: flex; flex-direction: column; gap: 20px; flex: 1; }
-        
-        /* Pod 流水线卡片 */
+
         .pod-pipeline {
             display: flex; gap: 10px; align-items: stretch; padding: 45px 10px 10px 10px;
             border: 1px dashed #555; border-radius: 8px; position: relative; opacity: var(--dim); transition: 0.5s;
             background: rgba(0,0,0,0.3);
         }
         .pod-pipeline.active-pod { opacity: 1; border-color: var(--data-color); border-width: 2px; background: rgba(57,197,187,0.1); box-shadow: 0 0 20px rgba(57,197,187,0.2); }
-        
+
         .pod-header { position: absolute; top: 0; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 5px 10px; box-sizing: border-box; background: rgba(0,0,0,0.5); border-bottom: 1px solid #444; border-radius: 8px 8px 0 0; }
         .pod-label { font-size: 14px; font-weight: bold; color: #fff; display: flex; align-items: center; }
-        
-        /* 迷你指标条 */
+
         .pod-metrics-mini { display: flex; gap: 15px; font-size: 11px; align-items: center; }
         .mini-bar-group { display: flex; align-items: center; gap: 5px; }
         .mini-bar-bg { width: 50px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; }
-        .mini-bar-fill { height: 100%; transition: 0.5s; }
+        .mini-bar-fill { height: 100%; width: 0; transition: 0.5s; }
         .kv-fill { background: var(--data-color); }
         .match-fill { background: var(--k8s-color); }
         .danger-bg { background: var(--danger-color) !important; }
 
         .node {
             background: var(--panel-bg); border: 1px solid #444; border-radius: 6px;
-            padding: 10px 8px; flex: 1; text-align: center; font-size: 12px; line-height: 1.4; z-index: 2; transition: 0.3s;
+            padding: 10px 8px; flex: 1; text-align: center; font-size: 12px; line-height: 1.4; z-index: 50; position: relative; transition: 0.3s;
         }
         .node-ctrl { border-color: var(--ctrl-color); color: var(--ctrl-color); }
         .node-data { border-color: var(--data-color); border-width: 2px; }
+        #dp-smg {
+            flex: 0 0 auto;
+            width: 148px;
+            min-height: 76px;
+            padding: 22px 16px;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid var(--k8s-color);
+            color: #e6edf3;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 8px;
+            background: #161b22;
+        }
+        #dp-smg.active-data {
+            box-shadow: 0 0 15px var(--k8s-color);
+            background: rgba(50, 108, 229, 0.18);
+            transform: translateY(-2px);
+        }
 
         .active-data { box-shadow: 0 0 15px var(--data-color); background: rgba(57,197,187,0.15); transform: translateY(-2px); }
         .active-ctrl { box-shadow: 0 0 15px var(--ctrl-color); background: rgba(210,153,34,0.15); }
         .active-obs { box-shadow: 0 0 15px var(--obs-color); background: rgba(188,140,255,0.15); }
 
-        .svg-connectors { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-        .beam-ctrl { stroke: var(--ctrl-color); stroke-width: 2; stroke-dasharray: 5,5; opacity: 0; transition: 0.3s; }
-        .beam-obs { stroke: var(--obs-color); stroke-width: 2; opacity: 0; transition: 0.3s; }
-        
+        .svg-connectors { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 55; overflow: visible; }
+        .beam-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0; transition: opacity 0.3s; }
+        .beam-ctrl { stroke: var(--ctrl-color); stroke-dasharray: 8 6; animation: beamFlow 0.7s linear infinite; filter: drop-shadow(0 0 4px var(--ctrl-color)); }
+        .beam-obs { stroke: var(--obs-color); stroke-dasharray: 8 6; animation: beamFlow 0.7s linear infinite; filter: drop-shadow(0 0 4px var(--obs-color)); }
+        .beam-data { stroke: var(--data-color); stroke-dasharray: 8 6; animation: beamFlow 0.6s linear infinite; filter: drop-shadow(0 0 4px var(--data-color)); }
+        @keyframes beamFlow { from { stroke-dashoffset: 14; } to { stroke-dashoffset: 0; } }
+
         .data-token {
             width: 14px; height: 14px; background: var(--data-color); border-radius: 50%;
             position: absolute; top: 0; left: 0;
             box-shadow: 0 0 15px var(--data-color), 0 0 30px #fff;
-            opacity: 0; transition: left 0.4s ease-in-out, top 0.4s ease-in-out, opacity 0.2s; z-index: 10;
+            opacity: 0; transition: left 0.4s ease-in-out, top 0.4s ease-in-out, opacity 0.2s; z-index: 60;
         }
 
         .dashboard { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .metric-card { background: #000; border: 1px solid var(--obs-color); padding: 10px; border-radius: 6px; }
+        .metric-card { background: #000; border: 1px solid var(--obs-color); padding: 10px; border-radius: 6px; position: relative; z-index: 50; }
+        .metric-card .k { font-size: 12px; color: #aaa; }
         .metric-value { font-size: 16px; font-weight: bold; color: #fff; margin-top: 5px; }
 
         .terminal {
             margin-top: 20px; width: 100%; max-width: 1300px; background: #000; border: 1px solid #333;
             border-radius: 8px; padding: 15px; height: 220px; overflow-y: auto; font-family: monospace; font-size: 13px; line-height: 1.5;
+            box-sizing: border-box;
         }
         .highlight { color: var(--data-color); font-weight: bold; }
     </style>
@@ -121,22 +158,23 @@
 <body>
 
     <div class="header">
-        <h2>SMG 路由：容量限制 vs 匹配</h2>
-        <div style="font-size: 13px; color: #888;">多目标打分：在 KV 容量与缓存匹配率之间做路由决策</div>
-        <button id="startBtn" onclick="runScenario()">发送请求 (场景 1：极速亲和命中)</button>
+        <h2>选哪台机器：前缀能复用多少，显存还剩多少</h2>
+        <p class="lead">分数高 = 命中多、显存还够。显存快满就减分，别把请求送到快要爆显存的机器。</p>
+        <button id="startBtn" onclick="runScenario()">看场景 1：命中优先</button>
     </div>
 
     <div class="plane-container" id="container">
-        <svg class="svg-connectors" id="connectors"></svg>
+        <svg class="svg-connectors" id="connectors">
+            <defs id="beam-defs"></defs>
+        </svg>
 
-        <!-- 1. 控制平面 -->
         <div class="plane plane-ctrl">
-            <div class="plane-title">🧠 控制平面 (状态聚合与动态打分)</div>
+            <div class="plane-title">路由怎么打分</div>
             <div class="ctrl-row">
-                <div class="node node-ctrl" id="ctrl-sync" style="flex:0.5"><b>集群状态监控</b><br><span style="font-size:10px;color:#888">拉取各 Pod 的 KV 与 Cache</span></div>
-                
+                <div class="node node-ctrl" id="ctrl-sync">看各台状态<br>显存占用、前缀命中</div>
                 <div class="decision-board" id="ctrl-score">
-                    <div>SMG 路由决策引擎: <code>Score = Match% - Penalty(KV Occupancy)</code></div>
+                    命中多、显存够 → 分高；显存快满 → 减分
+                    <div class="score-formula">Score = Match% - Penalty(KV Occupancy)</div>
                     <div class="score-row">
                         <span id="score-txt-a">Pod A 得分: --</span>
                         <span id="score-txt-b">Pod B 得分: --</span>
@@ -145,25 +183,25 @@
             </div>
         </div>
 
-        <!-- 2. 数据平面 -->
         <div class="plane plane-data">
-            <div class="plane-title">⚡ 数据平面 (多 Worker 流水线)</div>
+            <div class="plane-title">请求实际送到哪台 Pod</div>
             <div class="data-plane-container" id="data-plane-container">
                 <div class="data-token" id="data-token"></div>
-                
                 <div class="cluster-boundary">
-                    <div class="node node-data" id="dp-smg" style="border-color: var(--k8s-color); width: 80px; padding: 20px 10px;"><b>K8s SMG</b></div>
+                    <div class="node node-data" id="dp-smg">K8s SMG</div>
                     <div class="boundary-label">↑ 入口</div>
                 </div>
-
                 <div class="routing-fork">
-                    <!-- Pod A -->
                     <div class="pod-pipeline" id="pod-a">
                         <div class="pod-header">
-                            <div class="pod-label">📦 Pod A</div>
+                            <div class="pod-label">Pod A</div>
                             <div class="pod-metrics-mini">
-                                <div class="mini-bar-group">KV容量: <div class="mini-bar-bg"><div class="mini-bar-fill kv-fill" id="kv-bar-a" style="width: 0%;"></div></div> <span id="kv-txt-a">0%</span></div>
-                                <div class="mini-bar-group">Cache匹配: <div class="mini-bar-bg"><div class="mini-bar-fill match-fill" id="match-bar-a" style="width: 0%;"></div></div> <span id="match-txt-a">0%</span></div>
+                                <div class="mini-bar-group">显存占用 <span id="kv-txt-a">0%</span>
+                                    <div class="mini-bar-bg"><div class="mini-bar-fill kv-fill" id="kv-bar-a"></div></div>
+                                </div>
+                                <div class="mini-bar-group">前缀命中 <span id="match-txt-a">0%</span>
+                                    <div class="mini-bar-bg"><div class="mini-bar-fill match-fill" id="match-bar-a"></div></div>
+                                </div>
                             </div>
                         </div>
                         <div class="node node-data" id="a-api">Gateway</div>
@@ -172,14 +210,16 @@
                         <div class="node node-data" id="a-prefill">Prefill</div>
                         <div class="node node-data" id="a-decode">Decode</div>
                     </div>
-                    
-                    <!-- Pod B -->
                     <div class="pod-pipeline" id="pod-b">
                         <div class="pod-header">
-                            <div class="pod-label">📦 Pod B</div>
+                            <div class="pod-label">Pod B</div>
                             <div class="pod-metrics-mini">
-                                <div class="mini-bar-group">KV容量: <div class="mini-bar-bg"><div class="mini-bar-fill kv-fill" id="kv-bar-b" style="width: 0%;"></div></div> <span id="kv-txt-b">0%</span></div>
-                                <div class="mini-bar-group">Cache匹配: <div class="mini-bar-bg"><div class="mini-bar-fill match-fill" id="match-bar-b" style="width: 0%;"></div></div> <span id="match-txt-b">0%</span></div>
+                                <div class="mini-bar-group">显存占用 <span id="kv-txt-b">0%</span>
+                                    <div class="mini-bar-bg"><div class="mini-bar-fill kv-fill" id="kv-bar-b"></div></div>
+                                </div>
+                                <div class="mini-bar-group">前缀命中 <span id="match-txt-b">0%</span>
+                                    <div class="mini-bar-bg"><div class="mini-bar-fill match-fill" id="match-bar-b"></div></div>
+                                </div>
                             </div>
                         </div>
                         <div class="node node-data" id="b-api">Gateway</div>
@@ -192,21 +232,30 @@
             </div>
         </div>
 
-        <!-- 3. 可观测平面 -->
         <div class="plane plane-obs">
-            <div class="plane-title">👁️ 可观测平面 (请求链路追踪)</div>
+            <div class="plane-title">这一单花了多久</div>
             <div class="dashboard">
-                <div class="metric-card" id="obs-route">当前路由抉择<div class="metric-value" id="val-route">--</div></div>
-                <div class="metric-card" id="obs-prefill">Prefill 计算量<div class="metric-value" id="val-prefill">--</div></div>
-                <div class="metric-card" id="obs-ttft">端到端 TTFT<div class="metric-value" id="val-ttft">-- ms</div></div>
-                <div class="metric-card" id="obs-tpot">TPOT<div class="metric-value" id="val-tpot">-- ms</div></div>
+                <div class="metric-card">
+                    <div class="k">送到哪台</div>
+                    <div class="metric-value" id="val-route">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="k">Prefill 算了多少</div>
+                    <div class="metric-value" id="val-prefill">--</div>
+                </div>
+                <div class="metric-card" id="obs-ttft">
+                    <div class="k">首字延迟 (TTFT)</div>
+                    <div class="metric-value" id="val-ttft">-- ms</div>
+                </div>
+                <div class="metric-card" id="obs-tpot">
+                    <div class="k">每个字间隔 (TPOT)</div>
+                    <div class="metric-value" id="val-tpot">-- ms</div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="terminal" id="term">
-        <div><span style="color:#666">[System]</span> 引擎就绪。点击上方按钮，观察容量与命中率如何影响 SMG 路由选择</div>
-    </div>
+    <div class="terminal" id="term">点按钮看三次选择：命中优先、显存满了改道、两者折中。</div>
 
     <script>
         const term = document.getElementById('term');
@@ -224,33 +273,134 @@
 
         function act(id, type, duration=0) {
             const el = document.getElementById(id);
+            if (!el) return;
             el.classList.add(`active-${type}`);
-            if(duration > 0) setTimeout(() => el.classList.remove(`active-${type}`), duration);
+            if (id === 'ctrl-score') el.classList.add('active');
+            if (duration > 0) setTimeout(() => {
+                el.classList.remove(`active-${type}`);
+                if (id === 'ctrl-score') el.classList.remove('active');
+            }, duration);
+        }
+
+        const BEAM_COLOR = { ctrl: '#d29922', obs: '#bc8cff', data: '#39c5bb' };
+
+        function getBox(id) {
+            const el = document.getElementById(id);
+            const container = document.getElementById('container').getBoundingClientRect();
+            const rect = el.getBoundingClientRect();
+            return {
+                left: rect.left - container.left,
+                top: rect.top - container.top,
+                right: rect.right - container.left,
+                bottom: rect.bottom - container.top,
+                cx: rect.left - container.left + rect.width / 2,
+                cy: rect.top - container.top + rect.height / 2,
+                w: rect.width,
+                h: rect.height
+            };
+        }
+
+        function pullBackTowards(target, control, offset) {
+            const dx = control.x - target.x;
+            const dy = control.y - target.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist === 0) return target;
+            return { x: target.x + (dx / dist) * offset, y: target.y + (dy / dist) * offset };
+        }
+
+        function getMarkerId(color) {
+            const id = 'arrow-' + color.replace(/[^a-zA-Z0-9]/g, '');
+            if (!document.getElementById(id)) {
+                const defs = document.getElementById('beam-defs');
+                const dim = 9;
+                const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                marker.setAttribute('id', id);
+                marker.setAttribute('viewBox', `0 0 ${dim} ${dim}`);
+                marker.setAttribute('refX', String(dim - 1));
+                marker.setAttribute('refY', String(dim / 2));
+                marker.setAttribute('markerWidth', String(dim));
+                marker.setAttribute('markerHeight', String(dim));
+                marker.setAttribute('markerUnits', 'userSpaceOnUse');
+                marker.setAttribute('orient', 'auto');
+                const tip = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                tip.setAttribute('d', `M 0 1 L ${dim - 0.4} ${dim / 2} L 0 ${dim - 1} z`);
+                tip.setAttribute('fill', color);
+                marker.appendChild(tip);
+                defs.appendChild(marker);
+            }
+            return id;
         }
 
         function drawBeam(fromId, toId, type) {
-            const svg = document.getElementById('connectors');
-            const from = document.getElementById(fromId).getBoundingClientRect();
-            const to = document.getElementById(toId).getBoundingClientRect();
-            const container = document.getElementById('container').getBoundingClientRect();
-            const startX = from.left + from.width/2 - container.left;
-            const startY = from.bottom - container.top;
-            const endX = to.left + to.width/2 - container.left;
-            const endY = to.top - container.top;
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', startX); line.setAttribute('y1', startY);
-            line.setAttribute('x2', endX); line.setAttribute('y2', endY);
-            line.setAttribute('class', `beam-${type}`);
-            svg.appendChild(line);
-            setTimeout(() => line.style.opacity = '1', 50);
-            return line;
+            const fromEl = document.getElementById(fromId);
+            const toEl = document.getElementById(toId);
+            if (!fromEl || !toEl) return { style: { opacity: 0 } };
+
+            const a = getBox(fromId);
+            const b = getBox(toId);
+            const dx = b.cx - a.cx;
+            const dy = b.cy - a.cy;
+            const color = BEAM_COLOR[type] || BEAM_COLOR.ctrl;
+
+            let p1, p2, d;
+            const overlapY = (Math.max(a.top, b.top) + Math.min(a.bottom, b.bottom)) / 2;
+            const sameRow = overlapY > Math.max(a.top, b.top) && overlapY < Math.min(a.bottom, b.bottom);
+
+            if (fromId === 'ctrl-sync' && toId === 'ctrl-score') {
+                const y = overlapY;
+                p1 = { x: a.right, y };
+                p2 = { x: b.left, y };
+                p2 = pullBackTowards(p2, p1, 10);
+                const lift = y - 22;
+                const midX = (p1.x + p2.x) / 2;
+                d = `M ${p1.x} ${p1.y} Q ${midX} ${lift} ${p2.x} ${p2.y}`;
+            } else if (fromId === 'ctrl-score' && toId === 'dp-smg') {
+                p1 = { x: a.left + 32, y: a.bottom };
+                p2 = { x: b.cx, y: b.top };
+                const corridorY = a.bottom + Math.max(18, (b.top - a.bottom) * 0.42);
+                p2 = pullBackTowards(p2, { x: p2.x, y: corridorY }, 12);
+                d = `M ${p1.x} ${p1.y} C ${p1.x} ${corridorY}, ${p2.x} ${corridorY}, ${p2.x} ${p2.y}`;
+            } else if (fromId === 'dp-smg') {
+                p1 = { x: a.right, y: a.cy };
+                p2 = { x: b.left, y: b.cy };
+                const midX = (p1.x + p2.x) / 2;
+                p2 = pullBackTowards(p2, { x: midX, y: p2.y }, 10);
+                d = `M ${p1.x} ${p1.y} C ${midX} ${p1.y}, ${midX} ${p2.y}, ${p2.x} ${p2.y}`;
+            } else if (sameRow) {
+                p1 = { x: dx > 0 ? a.right : a.left, y: overlapY };
+                p2 = pullBackTowards({ x: dx > 0 ? b.left : b.right, y: overlapY }, p1, 10);
+                d = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+            } else {
+                p1 = { x: a.cx, y: dy > 0 ? a.bottom : a.top };
+                if (a.w > 220) p1.x = a.cx + Math.sign(dx) * (a.w / 2 - 28);
+                p2 = { x: b.cx, y: dy > 0 ? b.top : b.bottom };
+                const gap = Math.abs(p2.y - p1.y);
+                const corridorY = p1.y + Math.sign(dy) * Math.min(24, Math.max(14, gap * 0.32));
+                p2 = pullBackTowards(p2, { x: p2.x, y: corridorY }, 12);
+                if (Math.abs(p1.x - p2.x) < 10) {
+                    d = `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`;
+                } else {
+                    d = `M ${p1.x} ${p1.y} C ${p1.x} ${corridorY}, ${p2.x} ${corridorY}, ${p2.x} ${p2.y}`;
+                }
+            }
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('class', `beam-line beam-${type}`);
+            path.setAttribute('marker-end', `url(#${getMarkerId(color)})`);
+            document.getElementById('connectors').appendChild(path);
+            requestAnimationFrame(() => { path.style.opacity = '1'; });
+            return path;
         }
 
-        function clearBeams() { document.getElementById('connectors').innerHTML = ''; }
+        function clearBeams() {
+            document.querySelectorAll('#connectors path.beam-line').forEach(p => p.remove());
+        }
 
         function moveTokenTo(targetId) {
             const target = document.getElementById(targetId);
             const container = document.getElementById('data-plane-container');
+            if (!target) return;
             const targetRect = target.getBoundingClientRect();
             const contRect = container.getBoundingClientRect();
             const left = targetRect.left - contRect.left + (targetRect.width / 2) - 7;
@@ -265,41 +415,44 @@
             document.getElementById(`kv-txt-${pod}`).innerText = `${kv}%`;
             document.getElementById(`match-bar-${pod}`).style.width = `${match}%`;
             document.getElementById(`match-txt-${pod}`).innerText = `${match}%`;
-            
-            if(kv >= 90) document.getElementById(`kv-bar-${pod}`).classList.add('danger-bg');
+
+            if (kv >= 90) document.getElementById(`kv-bar-${pod}`).classList.add('danger-bg');
             else document.getElementById(`kv-bar-${pod}`).classList.remove('danger-bg');
         }
 
         const scenarios = [
             {
-                title: "场景 1：理想命中",
-                nextBtn: "发送请求 (场景 2：防爆仓降级)",
+                title: "场景 1：命中优先",
+                nextBtn: "看场景 2：显存满了改道",
                 podA: { kv: 45, match: 95, score: 95 },
                 podB: { kv: 30, match: 10, score: 10 },
                 winner: 'a',
-                logText: "Pod A 有 95% 历史缓存匹配，且 KV 容量健康(45%)。SMG 决定极速亲和性路由！",
+                logText: "选 Pod A：前缀命中 95%，显存占用 45%。",
                 ttft: "42 ms",
-                prefillLog: "✅ 命中 95% 缓存，跳过大量 Attention 矩阵计算，极速进入 Decode！"
+                prefillLog: "命中的那一段不用再算，只补没缓存的部分。",
+                prefillVal: "命中了，少算"
             },
             {
-                title: "场景 2：容量告警",
-                nextBtn: "发送请求 (场景 3：折中选择)",
+                title: "场景 2：显存满了改道",
+                nextBtn: "看场景 3：两者折中",
                 podA: { kv: 98, match: 95, score: -100 },
                 podB: { kv: 15, match: 0, score: 0 },
                 winner: 'b',
-                logText: "⚠️ 警告：Pod A 匹配率极高(95%)，但 KV 显存已爆满(98%)！触发 OOM 熔断惩罚机制。<br>&nbsp;&nbsp;&nbsp;↳ SMG 忍痛割爱，为保系统稳定，将请求漂移给冷启动的 Pod B。",
+                logText: "Pod A 命中虽高，但显存已 98%，再接会爆。改送到空的 Pod B，这条要重算整段输入。",
                 ttft: "220 ms",
-                prefillLog: "⚠️ 缓存 0 命中 (Cold Start)，必须执行高昂的全量 Prompt 矩阵计算 (Compute Bound)。"
+                prefillLog: "没有缓存，整段输入都要算，首字会慢。",
+                prefillVal: "整段都要算"
             },
             {
-                title: "场景 3：折中方案选择",
-                nextBtn: "重置 (回到场景 1)",
+                title: "场景 3：两者折中",
+                nextBtn: "回到场景 1",
                 podA: { kv: 85, match: 40, score: 20 },
                 podB: { kv: 50, match: 80, score: 80 },
                 winner: 'b',
-                logText: "Pod A 负荷较重且匹配一般。Pod B 匹配率优(80%)且容量充足(50%)。毫无疑问选择 Pod B。",
+                logText: "选 Pod B：命中 80%，占用 50%，比 A 更安全。",
                 ttft: "65 ms",
-                prefillLog: "✅ 命中 80% 缓存，轻量级计算即可补充剩余上下文。"
+                prefillLog: "命中的那一段不用再算，只补没缓存的部分。",
+                prefillVal: "命中了，少算"
             }
         ];
 
@@ -311,66 +464,62 @@
             document.getElementById('pod-b').classList.remove('active-pod');
             token.style.opacity = '0'; token.style.left = '0'; token.style.top = '0';
 
-            log(`🚀 <b>${s.title}</b>：外部请求到达集群入口...`, "#fff");
+            log(`${s.title}。一条请求到了入口。`, "#fff");
 
-            // 1. 同步状态 & 更新 UI 进度条
             act('ctrl-sync', 'ctrl', 1500);
             updatePodMetrics('a', s.podA.kv, s.podA.match);
             updatePodMetrics('b', s.podB.kv, s.podB.match);
-            log("🧠 [控制平面] 收集当前各节点的 KV 占用率 与 前缀树匹配率。", "var(--ctrl-color)");
+            log("看各台的显存占用和前缀命中。", "var(--ctrl-color)");
             await wait(1000);
 
-            // 2. SMG 打分博弈
             act('ctrl-score', 'active', 2000);
             const b1 = drawBeam('ctrl-sync', 'ctrl-score', 'ctrl');
             document.getElementById('score-txt-a').innerText = `Pod A 得分: ${s.podA.score < 0 ? '拒绝' : s.podA.score}`;
             document.getElementById('score-txt-b').innerText = `Pod B 得分: ${s.podB.score < 0 ? '拒绝' : s.podB.score}`;
-            if(s.podA.score < 0) document.getElementById('score-txt-a').style.color = "var(--danger-color)";
+            if (s.podA.score < 0) document.getElementById('score-txt-a').style.color = "var(--danger-color)";
             else document.getElementById('score-txt-a').style.color = "#fff";
-            
-            log("⚖️ [控制平面] SMG 根据多目标公式动态计算 Score...", "var(--ctrl-color)");
+
+            log("按公式打分。", "var(--ctrl-color)");
             log(s.logText, s.podA.score < 0 ? "var(--danger-color)" : "var(--ctrl-color)");
             await wait(1500); b1.style.opacity = 0;
 
-            // 3. 数据流转入对应 Pod
             const b2 = drawBeam('ctrl-score', 'dp-smg', 'ctrl');
             act('dp-smg', 'data', 1000);
             moveTokenTo('dp-smg');
             document.getElementById('val-route').innerText = `→ Pod ${s.winner.toUpperCase()}`;
             document.getElementById(`pod-${s.winner}`).classList.add('active-pod');
-            log(`⚡ [数据平面] 路由决定下发。流量注入 Pod ${s.winner.toUpperCase()}。`, "var(--data-color)");
-            await wait(1000); b2.style.opacity = 0;
+            log(`请求送到 Pod ${s.winner.toUpperCase()}。`, "var(--data-color)");
+            await wait(800);
 
             const tPod = s.winner;
-            // 节点穿越
+            const bRoute = drawBeam('dp-smg', `${tPod}-api`, 'data');
+            await wait(600); b2.style.opacity = 0; bRoute.style.opacity = 0;
             act(`${tPod}-api`, 'data', 500); moveTokenTo(`${tPod}-api`); await wait(500);
             act(`${tPod}-tok`, 'data', 500); moveTokenTo(`${tPod}-tok`); await wait(500);
             act(`${tPod}-sched`, 'data', 500); moveTokenTo(`${tPod}-sched`); await wait(500);
 
-            // 4. GPU Prefill (体现命中率的价值)
             act(`${tPod}-prefill`, 'data', 1500);
             moveTokenTo(`${tPod}-prefill`);
-            document.getElementById('val-prefill').innerText = s.podA.score < 0 ? "全量计算 (慢)" : "跳过计算 (快)";
+            document.getElementById('val-prefill').innerText = s.prefillVal;
             document.getElementById('val-prefill').style.color = s.podA.score < 0 ? "var(--danger-color)" : "#0f0";
-            
-            log(`🖥️ [GPU Prefill] ${s.prefillLog}`, s.podA.score < 0 ? "var(--danger-color)" : "#0f0");
+
+            log(s.prefillLog, s.podA.score < 0 ? "var(--danger-color)" : "#0f0");
             await wait(1200);
 
             act('obs-ttft', 'obs', 1500);
             const b3 = drawBeam(`${tPod}-prefill`, 'obs-ttft', 'obs');
             document.getElementById('val-ttft').innerText = s.ttft;
             document.getElementById('val-ttft').style.color = s.podA.score < 0 ? "var(--danger-color)" : "#0f0";
-            log(`👁️ [可观测平面] 获取 TTFT (首字延迟): ${s.ttft}`, "var(--obs-color)");
+            log(`首字延迟 ${s.ttft}。`, "var(--obs-color)");
             await wait(1000); b3.style.opacity = 0;
 
-            // 5. GPU Decode
-            log(`⚡ [GPU Worker] Decode 阶段：逐字迭代生成...`, "var(--data-color)");
+            log("开始逐字生成。", "var(--data-color)");
             moveTokenTo(`${tPod}-decode`);
-            for(let i=0; i<3; i++) {
+            for (let i = 0; i < 3; i++) {
                 act(`${tPod}-decode`, 'data', 300);
                 token.style.transform = "translateY(-50%) scale(1.5)";
                 setTimeout(() => token.style.transform = "translateY(-50%) scale(1)", 150);
-                
+
                 if (i === 1) {
                     act('obs-tpot', 'obs', 800);
                     const b4 = drawBeam(`${tPod}-decode`, 'obs-tpot', 'obs');
@@ -381,8 +530,8 @@
             }
 
             token.style.opacity = '0';
-            log("✅ 链路处理完成。SMG 多目标调度演示结束。", "#fff");
-            
+            log("这一单结束。", "#fff");
+
             currentScenario = (currentScenario + 1) % scenarios.length;
             btn.innerText = scenarios[currentScenario].nextBtn;
             btn.disabled = false;
