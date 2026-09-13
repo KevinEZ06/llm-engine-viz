@@ -7,18 +7,18 @@
     <style>
         :root {
             --bg: #0b0f19; --panel: rgba(22, 27, 34, 0.95); --text: #c9d1d9;
-            --api: #326ce5;      /* API/前台 */
-            --etcd: #8a2be2;     /* etcd/账本 */
-            --ctrl: #d29922;     /* 管家 */
-            --node-p: #f85149;   /* Prefill 车间 */
-            --node-d: #bc8cff;   /* Decode 车间 */
-            --svc: #2ea043;      /* Service 入口 */
-            --kv: #00ffff;       /* Mooncake KV 数据流 */
-            --meta: #ff00ff;     /* 票据控制流 */
+            --api: #326ce5;
+            --etcd: #8a2be2;
+            --ctrl: #d29922;
+            --node-p: #f85149;
+            --node-d: #bc8cff;
+            --svc: #2ea043;
+            --kv: #00ffff;
+            --meta: #ff00ff;
         }
         body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; overflow-x: hidden; }
         .header { text-align: center; margin-bottom: 20px; }
-        
+
         .btn-group { display: flex; gap: 15px; margin-bottom: 15px; z-index: 100; position: relative; }
         button { background: var(--api); color: #fff; border: none; padding: 12px 24px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; transition: 0.3s; box-shadow: 0 0 15px rgba(50,108,229,0.4); }
         button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 0 25px rgba(50,108,229,0.7); }
@@ -27,20 +27,20 @@
         .btn-reset:hover:not(:disabled) { background: #e3a83b; box-shadow: 0 0 25px rgba(210,153,34,0.6); }
 
         .topology { width: 100%; max-width: 1200px; position: relative; display: flex; flex-direction: column; gap: 20px; }
-        
+
         #flow-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; overflow: visible; }
         #gate-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
-        
+
         .flow-line { fill: none; stroke-width: 3; stroke-dasharray: 8, 8; animation: flowAnim 0.8s linear infinite; opacity: 0; transition: 0.3s; }
         @keyframes flowAnim { from { stroke-dashoffset: 16; } to { stroke-dashoffset: 0; } }
         .solid-line { fill: none; stroke-width: 4; stroke: var(--svc); opacity: 0; transition: 1s; box-shadow: 0 0 10px var(--svc); }
-        
+
         .kv-chunk-line { fill: none; stroke-width: 8; stroke: var(--kv); stroke-dasharray: 15, 15; animation: flowAnim 0.5s linear infinite reverse; opacity: 0; transition: 0.5s; filter: drop-shadow(0 0 8px var(--kv)); }
         .meta-ticket-line { fill: none; stroke-width: 3; stroke: var(--meta); stroke-dasharray: 6, 8; animation: flowAnim 0.3s linear infinite; opacity: 0; transition: 0.5s; filter: drop-shadow(0 0 8px var(--meta)); }
 
         .zone { border: 2px dashed #444; border-radius: 12px; padding: 25px 15px 15px 15px; position: relative; z-index: 5; display: flex; justify-content: space-around; align-items: center; transition: all 0.5s; }
         .zone-title { position: absolute; top: -12px; left: 20px; background: var(--bg); padding: 0 10px; font-weight: bold; font-size: 13px; color: #aaa; }
-        
+
         .zone-external { border-color: transparent; padding: 0; margin-top: 10px; }
         .zone-office { border-color: #555; background: linear-gradient(180deg, rgba(50,108,229,0.08) 0%, transparent 100%); }
         .zone-workshop { border-color: #555; display: grid; grid-template-columns: 1fr 220px 1fr; gap: 20px; background: rgba(255,255,255,0.02); padding-top: 35px;}
@@ -62,14 +62,14 @@
 
         #node-client { border-color: #fff; color: #fff; width: 140px; }
         .node-svc { border-color: var(--svc); color: var(--svc); width: 180px; opacity: 0.5; }
-        
+
         .office-layout { width: 100%; display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 20px; align-items: stretch; }
         .office-managers { display: flex; flex-direction: column; gap: 15px; justify-content: center; }
-        
+
         #node-api { border-color: var(--api); color: var(--api); display: flex; flex-direction: column; justify-content: center;}
         #node-etcd { border-color: var(--etcd); color: var(--etcd); }
         .node-ctrl { border-color: var(--ctrl); color: var(--ctrl); }
-        
+
         .server-node { border: 1px solid #444; border-radius: 6px; padding: 10px; background: #111; text-align: left; position: relative; transition: all 0.5s; }
         .server-title { font-size: 12px; color: #aaa; margin-bottom: 8px; display: flex; justify-content: space-between;}
         .server-title strong { color: #fff; }
@@ -81,35 +81,31 @@
         .logic-gate.show { opacity: 1; }
         .gate-if { font-weight: bold; margin-bottom: 4px; border-bottom: 1px dashed #444; padding-bottom: 4px; color: #ccc;}
         .gate-then { color: #0f0; margin-top: 6px; font-weight: bold;}
-        
+
         .terminal { width: 100%; max-width: 1200px; background: #000; border: 1px solid #333; border-radius: 8px; padding: 12px 15px; height: 180px; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.6; margin-top: 15px; box-sizing: border-box; }
         .log-sys { color: #666; }
 
-        /* =========================================
-           新增 Step 7：边界分离（K8s 与 业务透视）
-           ========================================= */
-        .k8s-boundary { 
-            border-color: var(--api) !important; 
-            box-shadow: 0 0 20px rgba(50,108,229,0.7), inset 0 0 10px rgba(50,108,229,0.2) !important; 
+        .k8s-boundary {
+            border-color: var(--api) !important;
+            box-shadow: 0 0 20px rgba(50,108,229,0.7), inset 0 0 10px rgba(50,108,229,0.2) !important;
             background-color: rgba(50,108,229,0.05) !important;
         }
-        .k8s-boundary::before { 
-            content: 'K8s 核心底座'; position: absolute; top: -12px; right: 10px; 
-            background: var(--api); color: #fff; font-size: 11px; padding: 2px 8px; 
+        .k8s-boundary::before {
+            content: 'K8s'; position: absolute; top: -12px; right: 10px;
+            background: var(--api); color: #fff; font-size: 11px; padding: 2px 8px;
             border-radius: 4px; font-weight: bold; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
 
-        .ai-boundary { 
-            border-color: var(--kv) !important; 
-            box-shadow: 0 0 20px rgba(0,255,255,0.6), inset 0 0 10px rgba(0,255,255,0.2) !important; 
+        .ai-boundary {
+            border-color: var(--kv) !important;
+            box-shadow: 0 0 20px rgba(0,255,255,0.6), inset 0 0 10px rgba(0,255,255,0.2) !important;
             background-color: rgba(0,255,255,0.05) !important;
         }
-        .ai-boundary::before { 
-            content: 'AI 业务负载'; position: absolute; top: -12px; right: 10px; 
-            background: var(--kv); color: #000; font-size: 11px; padding: 2px 8px; 
+        .ai-boundary::before {
+            content: '推理侧'; position: absolute; top: -12px; right: 10px;
+            background: var(--kv); color: #000; font-size: 11px; padding: 2px 8px;
             border-radius: 4px; font-weight: bold; z-index: 20; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
         }
-        /* 针对服务小框调整伪元素的定位 */
         #node-svc-p.k8s-boundary::before, #node-svc-d.k8s-boundary::before { right: -5px; }
 
     </style>
@@ -117,13 +113,15 @@
 <body>
 
     <div class="header">
-        <h2>Mooncake 传输与 K8s 架构</h2>
-        <div style="font-size: 13px; color: #aaa; margin-top: 5px;">K8s与业务负载。</div>
+        <h2>K8s 怎么拉起 P/D，Mooncake 怎么交 KV</h2>
+        <div style="font-size: 13px; color: #aaa; margin-top: 5px; line-height: 1.5; max-width: 42rem; margin-left: auto; margin-right: auto;">
+            上半是集群怎么把进程拉起来；下半是 KV 怎么从 Prefill 交给 Decode。
+        </div>
     </div>
 
     <div class="btn-group">
-        <button id="nextBtn" onclick="nextStep()">▶ 执行下一步 (提交订单)</button>
-        <button id="resetBtn" class="btn-reset" onclick="resetSimulation()">🔄 再次播放</button>
+        <button id="nextBtn" onclick="nextStep()">下一步：提交 YAML</button>
+        <button id="resetBtn" class="btn-reset" onclick="resetSimulation()">重来</button>
     </div>
 
     <div class="topology" id="topo">
@@ -133,57 +131,57 @@
         <div id="gate-layer"></div>
 
         <div class="zone zone-office" id="zone-office">
-            <div class="zone-title">🏢 办公室 (Control Plane) - 指令大脑与etcd账本</div>
+            <div class="zone-title">控制面：API Server 和 etcd</div>
             <div class="office-layout">
-                <div class="node-box" id="node-api"><b>前台 API Server</b><span>收发订单 / 验 kind</span></div>
+                <div class="node-box" id="node-api"><b>API Server</b><span>收 YAML，写入 etcd</span></div>
                 <div class="node-box" id="node-etcd">
-                    <b>保险柜 etcd</b><span>只存「应该有什么」</span>
-                    <div class="ledger-screen" id="ledger">[etcd账本]<br>等待录入...</div>
+                    <b>etcd</b><span>记下该有哪些 Pod 和 Service</span>
+                    <div class="ledger-screen" id="ledger">[etcd]<br>还没有记录</div>
                 </div>
                 <div class="office-managers">
-                    <div class="node-box node-ctrl" id="node-lws"><b>LWS 管家</b><span>维持 1头1尾 结构</span></div>
-                    <div class="node-box node-ctrl" id="node-sched"><b>调度管家</b><span>分配物理 NPU 节点</span></div>
+                    <div class="node-box node-ctrl" id="node-lws"><b>LWS</b><span>保证 Prefill 一组、Decode 一组</span></div>
+                    <div class="node-box node-ctrl" id="node-sched"><b>Scheduler</b><span>把 Pod 放到有 GPU 的节点</span></div>
                 </div>
             </div>
         </div>
 
         <div class="zone zone-workshop">
-            <div class="zone-title">🏭 现场车间 (Data Plane) - NPU 算力引擎与全局缓存池</div>
-            
+            <div class="zone-title">数据面：Prefill / Decode 进程</div>
+
             <div class="workshop-col col-p">
-                <div class="col-title" style="color:var(--node-p)">车间 Prefill (P组)</div>
+                <div class="col-title" style="color:var(--node-p)">Prefill 组</div>
                 <div class="server-node" id="node-73">
-                    <div class="server-title"><strong>73 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-73" style="border-color:var(--node-p)">📦 P头 (gRPC :9081)<br><span style="font-size:10px;">推理进程</span></div>
+                    <div class="server-title"><strong>节点 73 · kubelet</strong><span>16 卡</span></div>
+                    <div class="pod-real" id="pod-73" style="border-color:var(--node-p)">Prefill 主进程<br><span style="font-size:10px;">端口 9081</span></div>
                 </div>
                 <div class="server-node" id="node-74">
-                    <div class="server-title"><strong>74 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-74" style="border-color:var(--node-p)">📦 P跟班 (headless)<br><span style="font-size:10px;">推理进程</span></div>
+                    <div class="server-title"><strong>节点 74 · kubelet</strong><span>16 卡</span></div>
+                    <div class="pod-real" id="pod-74" style="border-color:var(--node-p)">Prefill 其余进程<br><span style="font-size:10px;">不对公网开放</span></div>
                 </div>
             </div>
 
             <div class="mooncake-pool" id="mooncake">
-                <b>🌕 Mooncake KV Pool</b>
-                <span>公用大冰箱<br>(RDMA / NVMe SSD)<br><br>打破存算边界</span>
+                <b>共享 KV 池（RDMA / SSD）</b>
+                <span>Prefill 写入，Decode 读取</span>
             </div>
 
             <div class="workshop-col col-d">
-                <div class="col-title" style="color:var(--node-d)">车间 Decode (D组)</div>
+                <div class="col-title" style="color:var(--node-d)">Decode 组</div>
                 <div class="server-node" id="node-75">
-                    <div class="server-title"><strong>75 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-75" style="border-color:var(--node-d)">📦 D头 (gRPC :9900)<br><span style="font-size:10px;">生成进程</span></div>
+                    <div class="server-title"><strong>节点 75 · kubelet</strong><span>16 卡</span></div>
+                    <div class="pod-real" id="pod-75" style="border-color:var(--node-d)">Decode 主进程<br><span style="font-size:10px;">端口 9900</span></div>
                 </div>
                 <div class="server-node" id="node-76">
-                    <div class="server-title"><strong>76 kubelet</strong><span>16卡 NPU</span></div>
-                    <div class="pod-real" id="pod-76" style="border-color:var(--node-d)">📦 D跟班 (headless)<br><span style="font-size:10px;">生成进程</span></div>
+                    <div class="server-title"><strong>节点 76 · kubelet</strong><span>16 卡</span></div>
+                    <div class="pod-real" id="pod-76" style="border-color:var(--node-d)">Decode 其余进程<br><span style="font-size:10px;">不对公网开放</span></div>
                 </div>
             </div>
         </div>
 
         <div class="zone zone-external">
-            <div class="node-box node-svc" id="node-svc-p"><b>Service (Prefill)</b><span>:9081 认 Prefill 头</span></div>
-            <div class="node-box" id="node-client"><b>👤 你 / 客人</b><span>发出推理请求</span></div>
-            <div class="node-box node-svc" id="node-svc-d"><b>Service (Decode)</b><span>:9900 认 Decode 头</span></div>
+            <div class="node-box node-svc" id="node-svc-p"><b>Service · Prefill</b><span>请求转到 Prefill 主进程</span></div>
+            <div class="node-box" id="node-client"><b>客户端</b><span>发一条推理请求</span></div>
+            <div class="node-box node-svc" id="node-svc-d"><b>Service · Decode</b><span>请求转到 Decode 主进程</span></div>
         </div>
     </div>
 
@@ -192,7 +190,7 @@
     <script>
         const topo = document.getElementById('topo');
         const flowLayer = document.getElementById('flow-layer');
-        const defsLayer = document.getElementById('arrow-defs');
+        let defsLayer = document.getElementById('arrow-defs');
         const gateLayer = document.getElementById('gate-layer');
         const term = document.getElementById('term');
         const btn = document.getElementById('nextBtn');
@@ -216,7 +214,7 @@
                 marker.setAttribute('id', id); marker.setAttribute('viewBox', '0 0 10 10');
                 marker.setAttribute('refX', '7'); marker.setAttribute('refY', '5');
                 marker.setAttribute('markerWidth', '6'); marker.setAttribute('markerHeight', '6');
-                marker.setAttribute('orient', 'auto'); 
+                marker.setAttribute('orient', 'auto');
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 path.setAttribute('d', 'M 0 1 L 9 5 L 0 9 z'); path.setAttribute('fill', colorStr);
                 marker.appendChild(path); defsLayer.appendChild(marker);
@@ -239,7 +237,7 @@
         }
 
         function drawFlow(fromId, toId, color, type='dash', duration = 2500, curveOffset = 0) {
-            const p1Raw = getCenter(fromId); 
+            const p1Raw = getCenter(fromId);
             const p2Raw = getCenter(toId);
             let cx, cy;
 
@@ -253,35 +251,35 @@
             } else if (fromId.includes('pod') && toId.includes('client')) {
                 cx = (p1Raw.x + p2Raw.x) / 2; cy = p2Raw.y - 50;
             } else if ((fromId.includes('lws') || fromId.includes('sched')) && toId.includes('api')) {
-                cx = (p1Raw.x + p2Raw.x) / 2; cy = p1Raw.y - 80; 
+                cx = (p1Raw.x + p2Raw.x) / 2; cy = p1Raw.y - 80;
             } else {
-                cx = (p1Raw.x + p2Raw.x) / 2; 
-                cy = ((p1Raw.y + p2Raw.y) / 2) + (curveOffset !== 0 ? curveOffset : (Math.abs(p1Raw.x - p2Raw.x) > 150 ? -30 : 0)); 
+                cx = (p1Raw.x + p2Raw.x) / 2;
+                cy = ((p1Raw.y + p2Raw.y) / 2) + (curveOffset !== 0 ? curveOffset : (Math.abs(p1Raw.x - p2Raw.x) > 150 ? -30 : 0));
             }
-            
+
             const p1 = pullBackTowards(p1Raw, {x: cx, y: cy}, 20);
-            const p2 = pullBackTowards(p2Raw, {x: cx, y: cy}, 45); 
+            const p2 = pullBackTowards(p2Raw, {x: cx, y: cy}, 45);
 
             const d = `M ${p1.x} ${p1.y} Q ${cx} ${cy} ${p2.x} ${p2.y}`;
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', d);
             path.setAttribute('stroke', color);
-            
+
             const markerId = getMarkerId(color);
             path.setAttribute('marker-end', `url(#${markerId})`);
-            
+
             if(type === 'solid') path.setAttribute('class', 'solid-line');
             else if(type === 'kv') path.setAttribute('class', 'kv-chunk-line');
             else if(type === 'meta') path.setAttribute('class', 'meta-ticket-line');
             else path.setAttribute('class', 'flow-line');
-            
+
             flowLayer.appendChild(path);
             setTimeout(() => path.style.opacity = '1', 50);
-            
+
             if(duration > 0 && type !== 'solid') {
                 setTimeout(() => { path.style.opacity = '0'; setTimeout(()=>path.remove(), 300); }, duration);
             }
-            return { cx, cy, path }; 
+            return { cx, cy, path };
         }
 
         function spawnGate(x, y, condition, action, color) {
@@ -289,8 +287,8 @@
             gate.className = 'logic-gate';
             gate.style.left = `${x}px`; gate.style.top = `${y}px`; gate.style.borderColor = color;
             gate.innerHTML = `
-                <div class="gate-if">[业务动作 / 状态]:<br><span style="color:#ddd; font-weight:normal;">${condition}</span></div>
-                <div class="gate-then">[执行流向]:<br><span style="color:#0f0; font-weight:normal;">${action}</span></div>
+                <div class="gate-if">发生了什么<br><span style="color:#ddd; font-weight:normal;">${condition}</span></div>
+                <div class="gate-then">接着做<br><span style="color:#0f0; font-weight:normal;">${action}</span></div>
             `;
             gateLayer.appendChild(gate);
             setTimeout(() => gate.classList.add('show'), 50);
@@ -307,18 +305,22 @@
 
         function resetSimulation() {
             step = 0;
-            flowLayer.innerHTML = '<defs id="arrow-defs"></defs>'; clearGates(); term.innerHTML = '';
-            ledger.innerHTML = '[etcd]<br>等待录入...';
+            flowLayer.innerHTML = '<defs id="arrow-defs"></defs>';
+            defsLayer = document.getElementById('arrow-defs');
+            clearGates(); term.innerHTML = '';
+            ledger.innerHTML = '[etcd]<br>还没有记录';
             ['73','74','75','76'].forEach(id => { document.getElementById(`pod-${id}`).style.display = 'none'; });
             document.getElementById('node-svc-p').style.opacity = '0.5';
             document.getElementById('node-svc-d').style.opacity = '0.5';
             document.getElementById('mooncake').classList.remove('active');
-            
-            // 移除所有边界类
+
             document.querySelectorAll('.k8s-boundary').forEach(el => el.classList.remove('k8s-boundary'));
             document.querySelectorAll('.ai-boundary').forEach(el => el.classList.remove('ai-boundary'));
 
-            btn.style.display = 'inline-block'; btn.innerText = "▶ 提交订单 (kubectl apply)"; btn.disabled = false;
+            btn.style.display = 'inline-block';
+            btn.innerText = "下一步：提交 YAML";
+            btn.style.boxShadow = '';
+            btn.disabled = false;
             resetBtn.style.display = 'none';
         }
 
@@ -328,105 +330,100 @@
             clearGates();
 
             if (step === 1) {
-                log("📄 <b>[Step 1]</b> 客户端发送 YAML 订单。");
+                log("<b>[1]</b> 提交 LWS 和 Service 的 YAML。");
                 const m = drawFlow('node-client', 'node-api', '#fff');
-                spawnGate(m.cx + 100, m.cy - 30, "收到 LWS 与 Service 订单", "写入 etcd", "#fff");
+                spawnGate(m.cx + 100, m.cy - 30, "收到 LWS 和 Service 的 YAML", "写入 etcd", "#fff");
                 actNode('node-client', '#fff'); await wait(1200);
 
                 drawFlow('node-api', 'node-etcd', 'var(--api)'); await wait(800);
-                ledger.innerHTML = `<span style="color:#0f0">+ LWS: P组, D组</span><br><span style="color:#0f0">+ SVC: 9081, 9900</span>`;
-                btn.innerText = "▶ 2. 管家对账发单";
+                ledger.innerHTML = `<span style="color:#0f0">+ LWS: Prefill 组, Decode 组</span><br><span style="color:#0f0">+ Service: 9081, 9900</span>`;
+                btn.innerText = "下一步：LWS 创建 Pod";
 
             } else if (step === 2) {
-                log("👔 <b>[Step 2]</b> LWS 管家核对账单，补开子订单。");
+                log("<b>[2]</b> LWS 发现还没有 Pod，创建 4 个。");
                 drawFlow('node-etcd', 'node-lws', 'var(--ctrl)'); await wait(1000);
-                
+
                 const m = drawFlow('node-lws', 'node-api', 'var(--ctrl)');
-                spawnGate(m.cx, m.cy + 30, "现场为 0组", "新建 4个 Pod", "var(--ctrl)");
+                spawnGate(m.cx, m.cy + 30, "Prefill / Decode 组都是空的", "创建 4 个 Pod", "var(--ctrl)");
                 await wait(1500);
 
                 drawFlow('node-api', 'node-etcd', 'var(--api)'); await wait(600);
-                ledger.innerHTML += `<br><span style="color:var(--ctrl)">> 待分配: 4 个裸 Pod</span>`;
-                btn.innerText = "▶ 3. 调度员分配节点";
+                ledger.innerHTML += `<br><span style="color:var(--ctrl)">> 待调度: 4 个 Pod</span>`;
+                btn.innerText = "下一步：调度到节点";
 
             } else if (step === 3) {
-                log("🗺️ <b>[Step 3]</b> 调度管家接手孤儿 Pod，下派工单。");
+                log("<b>[3]</b> Scheduler 给还没绑定节点的 Pod 选机器。");
                 drawFlow('node-etcd', 'node-sched', 'var(--ctrl)'); await wait(1000);
-                
+
                 const m = drawFlow('node-sched', 'node-api', 'var(--ctrl)');
-                spawnGate(m.cx, m.cy + 30, "Pod 无 nodeName", "下发 NPU 节点", "var(--ctrl)");
+                spawnGate(m.cx, m.cy + 30, "Pod 还没分到机器", "绑到有 GPU 的节点", "var(--ctrl)");
                 await wait(1500);
 
                 drawFlow('node-api', 'node-etcd', 'var(--api)'); await wait(600);
-                ledger.innerHTML = ledger.innerHTML.replace("> 待分配: 4 个裸 Pod", "<span style='color:var(--ctrl)'>> 派发至: P(73,74), D(75,76)</span>");
-                btn.innerText = "▶ 4. 现场车间启动引擎";
+                ledger.innerHTML = ledger.innerHTML.replace("> 待调度: 4 个 Pod", "> 已绑定: Prefill(73,74), Decode(75,76)");
+                btn.innerText = "下一步：kubelet 拉起进程";
 
             } else if (step === 4) {
-                log("👷 <b>[Step 4]</b> kubelet 看见派发单，向物理机索要显卡。");
+                log("<b>[4]</b> kubelet 看到绑定结果，在本机拉起容器。");
                 drawFlow('node-etcd', 'node-73', 'var(--node-p)'); drawFlow('node-etcd', 'node-75', 'var(--node-d)');
                 await wait(1200);
 
                 ['73','74','75','76'].forEach(id => { document.getElementById(`pod-${id}`).style.display = 'block'; });
                 await wait(1000);
                 drawFlow('node-73', 'node-api', '#fff'); drawFlow('node-75', 'node-api', '#fff'); await wait(600);
-                
+
                 drawFlow('node-api', 'node-etcd', 'var(--api)'); await wait(600);
-                ledger.innerHTML = `<span style="color:#0f0">> 4个 Pod 全部宣告 Running</span>`;
-                btn.innerText = "▶ 5. 打通 Service 路由";
+                ledger.innerHTML = `<span style="color:#0f0">> 4 个 Pod 都在跑</span>`;
+                btn.innerText = "下一步：接通 Service";
 
             } else if (step === 5) {
-                log("🚪 <b>[Step 5]</b> Service 就绪，贯通内外网络层。");
+                log("<b>[5]</b> Service 把流量指到 Prefill / Decode 的主 Pod。");
                 drawFlow('node-etcd', 'node-svc-p', 'var(--svc)'); drawFlow('node-etcd', 'node-svc-d', 'var(--svc)');
                 await wait(1500);
                 document.getElementById('node-svc-p').style.opacity = '1'; document.getElementById('node-svc-d').style.opacity = '1';
-                
+
                 drawFlow('node-svc-p', 'pod-73', 'var(--svc)', 'solid');
                 drawFlow('node-svc-d', 'pod-75', 'var(--svc)', 'solid');
                 await wait(1500);
-                
-                btn.innerText = "▶ 6. Mooncake 存算分离交接";
+
+                btn.innerText = "下一步：交 KV";
                 btn.style.boxShadow = "0 0 25px var(--kv)";
 
             } else if (step === 6) {
-                log("<br>=============================", "#fff");
-                log("🌕 <b>[Step 6] Mooncake 存算分离轨道分流交接</b>", "var(--kv)");
-                
                 const c2p = drawFlow('node-client', 'node-svc-p', '#fff', 'dash', 0);
                 await wait(800);
 
-                log("📦 <b>[算完下沉]</b> P节点算完几十 GB 的菜，直接塞进底下的公用冰箱。", "var(--kv)");
+                log("<b>[6]</b> Prefill 算完，把这份请求的 KV 写入 Mooncake。", "var(--kv)");
                 document.getElementById('mooncake').classList.add('active');
                 const p2m = drawFlow('pod-73', 'mooncake', 'var(--kv)', 'kv', 0, 60);
-                spawnGate(p2m.cx - 160, p2m.cy + 50, "Prefill 计算出海量 KV", "数据下沉装入全局冰箱<br>(Mooncake Pool)", "var(--kv)");
+                spawnGate(p2m.cx - 160, p2m.cy + 50, "Prefill 算完", "把这份请求的 KV 写入 Mooncake", "var(--kv)");
                 await wait(2500);
-                
-                log("🎫 <b>[票据高抛]</b> 同时，P给D扔出一张极轻的“取菜小票”（Handle）。", "var(--meta)");
+
+                log("Prefill 只把句柄发给 Decode，不搬整份 KV。", "var(--meta)");
                 const meta = drawFlow('pod-73', 'pod-75', 'var(--meta)', 'meta', 0, -120);
-                spawnGate(meta.cx, meta.cy - 70, "控制流指令互通", "向组装员(D)高抛一张轻量级<br>的取菜小票(Handle)", "var(--meta)");
+                spawnGate(meta.cx, meta.cy - 70, "Prefill 只把句柄发给 Decode", "不搬整份 KV", "var(--meta)");
                 await wait(2500);
-                
-                log("🚀 <b>[捞出组装]</b> D节点拿着票据，自己从冰箱里捞出数据，拼装出餐！", "var(--kv)");
+
+                log("Decode 用句柄从池子里把 KV 读回来，开始生成。", "var(--kv)");
                 const m2d = drawFlow('mooncake', 'pod-75', 'var(--kv)', 'kv', 0, 60);
-                spawnGate(m2d.cx + 160, m2d.cy + 50, "收到小票", "自己去冰箱捞出匹配的<br>KV 食材，组装生成Token", "var(--kv)");
+                spawnGate(m2d.cx + 160, m2d.cy + 50, "Decode 用句柄从池子里把 KV 读回来", "开始生成", "var(--kv)");
                 await wait(1500);
-                
+
                 const d2c = drawFlow('pod-75', 'node-client', '#fff', 'dash', 0);
-                log("✅ <b>[出餐闭环]</b> 存算分离的大基建，完美避免了 P 节点被庞大网络传输卡死的命运！");
+                log("大块 KV 走共享池，P/D 之间只传句柄。");
 
                 setTimeout(() => {
                     [c2p.path, p2m.path, meta.path, m2d.path, d2c.path].forEach(p => { p.style.opacity = 0; setTimeout(() => p.remove(), 1000); });
                     clearGates();
-                    
+
                     btn.style.display = 'inline-block';
-                    btn.innerText = "▶ 7. 透视 K8s 底座边界";
+                    btn.innerText = "下一步：分清哪部分是 K8s";
                     btn.style.boxShadow = "0 0 25px var(--api)";
                 }, 8000);
 
             } else if (step === 7) {
-                log("<br>=============================", "#fff");
-                log("🔲 <b>[Step 7] 框出 Kubernetes 基建边界</b>", "var(--api)");
+                log("<b>[7]</b> 蓝框是 K8s（拉进程、做服务发现）；青框是推理进程和 KV 池。K8s 不管模型在算什么。", "var(--api)");
 
-                // 【已修复原本会导致 JS 卡死的引号语法错误】
                 document.getElementById('zone-office').classList.add('k8s-boundary');
                 document.getElementById('node-svc-p').classList.add('k8s-boundary');
                 document.getElementById('node-svc-d').classList.add('k8s-boundary');
@@ -439,11 +436,7 @@
                 document.getElementById('mooncake').classList.add('ai-boundary');
 
                 const center = getCenter('topo');
-                // 彻底使用单引号解决内嵌双引号的问题
-                spawnGate(center.x, center.y - 120, "区分『舞台搭设』与『台上演戏』", "<span style='color:var(--api)'>蓝色边框：K8s 基建舞台</span><br><span style='color:var(--kv)'>青色边框：AI 业务负载</span>", "#fff");
-
-                log("📘 <b>[蓝色发光] K8s 大基建</b>：Office内的管家、车间的Kubelet工头、以及Service牌子。它们只负责『派发资源、拉起进程、引流网络』。");
-                log("🟩 <b>[青色发光] AI 业务层</b>：跑在容器内的推理引擎、以及底层的 Mooncake 全局缓存池。它们全权负责『算力执行与 KV 存取交接』，K8s 并不关心它们到底在算什么。");
+                spawnGate(center.x, center.y - 120, "蓝框是 K8s（拉进程、做服务发现）；青框是推理进程和 KV 池。", "K8s 不管模型在算什么。", "#fff");
 
                 btn.style.display = 'none';
                 resetBtn.style.display = 'inline-block';
