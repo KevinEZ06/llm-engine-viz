@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>投机解码原理模拟</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body { margin: 0; background-color: #020617; }
+        
+        @keyframes glowCell {
+            0% { box-shadow: inset 0 0 0 rgba(139, 92, 246, 0); background-color: rgba(30, 41, 59, 0.5); }
+            50% { box-shadow: inset 0 0 25px rgba(139, 92, 246, 0.9); background-color: rgba(139, 92, 246, 0.4); border-color: #a78bfa; }
+            100% { box-shadow: inset 0 0 0 rgba(139, 92, 246, 0); background-color: rgba(30, 41, 59, 0.5); }
+        }
+        @keyframes shatter {
+            0% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; filter: grayscale(0%); }
+            20% { transform: translate(-50%, -50%) scale(1.1) rotate(-5deg); opacity: 1; filter: grayscale(50%); border-color: #ef4444; }
+            100% { transform: translate(-50%, 60px) scale(0.5) rotate(25deg); opacity: 0; filter: grayscale(100%); }
+        }
+        @keyframes fadeOut { 0% { opacity: 1; } 100% { opacity: 0; } }
+        @keyframes popInFaint { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; } }
+        @keyframes popInSolid { 0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.6; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        @keyframes popInScale { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        @keyframes saveToCache {
+            0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 rgba(16, 185, 129, 0); border-color: #a78bfa; }
+            50% { transform: translate(-50%, -50%) scale(1.05); box-shadow: 0 0 30px rgba(16, 185, 129, 0.8); border-color: #34d399; background-color: rgba(6, 78, 59, 0.8); }
+            100% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); border-color: #10b981; }
+        }
+        @keyframes slideInRight { 0% { transform: translateX(30px); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
+        @keyframes flowDown { 0% { stroke-dashoffset: 20; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+        @keyframes lineDrop { 0% { height: 0%; opacity: 1;} 50% { height: 100%; opacity: 1;} 100% { height: 100%; opacity: 0;} }
+
+        .bg-striped-dead {
+            background-image: repeating-linear-gradient(-45deg, rgba(239, 68, 68, 0.15) 0px, rgba(239, 68, 68, 0.15) 8px, rgba(15, 23, 42, 0.9) 8px, rgba(15, 23, 42, 0.9) 16px);
+            border-color: rgba(239, 68, 68, 0.4);
+            color: rgba(239, 68, 68, 0.6);
+        }
+        .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #0f172a; border-radius: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 5px; border: 2px solid #0f172a; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        const { useEffect, useState, useMemo } = React;
+
+        const Icon = ({ path, className }) => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} dangerouslySetInnerHTML={{ __html: path }} />;
+        const Play = (p) => <Icon {...p} path='<polygon points="5 3 19 12 5 21 5 3"></polygon>' />;
+        const CheckCircle2 = (p) => <Icon {...p} path='<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline>' />;
+        const XCircle = (p) => <Icon {...p} path='<circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line>' />;
+        const Cpu = (p) => <Icon {...p} path='<rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line>' />;
+        const Zap = (p) => <Icon {...p} path='<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>' />;
+        const GitBranch = (p) => <Icon {...p} path='<line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path>' />;
+        const Layers = (p) => <Icon {...p} path='<polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline>' />;
+        const Hash = (p) => <Icon {...p} path='<line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line>' />;
+        const Code = (p) => <Icon {...p} path='<polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline>' />;
+        const Database = (p) => <Icon {...p} path='<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>' />;
+        const ChevronLeft = (p) => <Icon {...p} path='<polyline points="15 18 9 12 15 6"></polyline>' />;
+        const ChevronRight = (p) => <Icon {...p} path='<polyline points="9 18 15 12 9 6"></polyline>' />;
+
+        const Y_OFFSET = 270; 
+        const ROOT_NODE = { id: 'root', text: 'SGLang is', x: 80, y: 220 + Y_OFFSET };
+
+        const ALL_DRAFT_NODES = [
+            { id: 'n1', text: 'designed', parent: 'root', x: 280, y: 100 + Y_OFFSET, depth: 1, isDummy: false, prob: 0.45 },
+            { id: 'n2', text: 'built',    parent: 'root', x: 280, y: 220 + Y_OFFSET, depth: 1, isDummy: false, prob: 0.35 },
+            { id: 'n3', text: 'a',        parent: 'root', x: 280, y: 340 + Y_OFFSET, depth: 1, isDummy: false, prob: 0.15 },
+            { id: 'd1', text: 'used',     parent: 'root', x: 280, y: 450 + Y_OFFSET, depth: 1, isDummy: true,  prob: 0.02 },
+
+            { id: 'n4', text: 'for',      parent: 'n1',   x: 490, y: 100 + Y_OFFSET, depth: 2, isDummy: false, prob: 0.78 },
+            { id: 'n5', text: 'with',     parent: 'n2',   x: 490, y: 190 + Y_OFFSET, depth: 2, isDummy: false, prob: 0.65 }, 
+            { id: 'd2', text: 'by',       parent: 'n2',   x: 490, y: 260 + Y_OFFSET, depth: 2, isDummy: true,  prob: 0.04 }, 
+            { id: 'n6', text: 'fast',     parent: 'n3',   x: 490, y: 340 + Y_OFFSET, depth: 2, isDummy: false, prob: 0.60 }, 
+
+            { id: 'n7', text: 'LLMs',     parent: 'n4',   x: 700, y: 100 + Y_OFFSET, depth: 3, isDummy: false, prob: 0.88 },
+            { id: 'd3', text: 'in',       parent: 'n5',   x: 700, y: 190 + Y_OFFSET, depth: 3, isDummy: true,  prob: 0.03 },
+            { id: 'n8', text: 'engine',   parent: 'n6',   x: 700, y: 340 + Y_OFFSET, depth: 3, isDummy: false, prob: 0.06 }
+        ];
+
+        const VALID_NODES = ALL_DRAFT_NODES.filter(n => !n.isDummy);
+        
+        const TREE_MASK = VALID_NODES.map(rowNode => {
+            return VALID_NODES.map(colNode => {
+                let current = rowNode.id;
+                let guard = 0;
+                while (current !== 'root' && guard < 50) {
+                    guard++;
+                    if (current === colNode.id) return 1; 
+                    const nodeInfo = VALID_NODES.find(n => n.id === current);
+                    if (!nodeInfo) break;
+                    current = nodeInfo.parent;
+                }
+                return 0; 
+            });
+        });
+
+        const TARGET_PREDICTIONS = [
+            { sourceId: 'n1', target: 'for', prob: 0.98 },
+            { sourceId: 'n2', target: 'with', prob: 0.40 }, 
+            { sourceId: 'n3', target: 'fast', prob: 0.12 }, 
+            { sourceId: 'n4', target: 'LLMs', prob: 0.99 },
+            { sourceId: 'n5', target: 'memory', prob: 0.25 },
+            { sourceId: 'n6', target: 'engine', prob: 0.05 },
+            { sourceId: 'n7', target: '.', prob: 0.85 },
+            { sourceId: 'n8', target: 'systems', prob: 0.01 },
+        ];
+        
+        const getCandidatesData = (nodeId) => {
+            const data = {
+                'root': [
+                    { t: 'designed', p: 0.45, pass: true }, { t: 'built', p: 0.35, pass: true }, { t: 'a', p: 0.15, pass: true }
+                ],
+                'n1': [
+                    { t: 'for', p: 0.78, pass: true }, { t: 'to', p: 0.02, pass: false }, { t: 'it', p: 0.01, pass: false }
+                ],
+                'n2': [
+                    { t: 'with', p: 0.65, pass: true }, { t: 'by', p: 0.04, pass: false }, { t: 'in', p: 0.01, pass: false }
+                ],
+                'n3': [
+                    { t: 'fast', p: 0.60, pass: true }, { t: 'new', p: 0.03, pass: false }, { t: 'the', p: 0.01, pass: false }
+                ],
+                'n4': [
+                    { t: 'LLMs', p: 0.88, pass: true }, { t: 'AI', p: 0.04, pass: false }, { t: 'models', p: 0.02, pass: false }
+                ],
+                'n5': [
+                    { t: 'in', p: 0.03, pass: false }, { t: 'mem', p: 0.01, pass: false }, { t: 'all', p: 0.01, pass: false }
+                ],
+                'n6': [
+                    { t: 'engine', p: 0.06, pass: true }, { t: 'sys', p: 0.02, pass: false }, { t: 'app', p: 0.01, pass: false }
+                ]
+            };
+            return data[nodeId] || [
+                { t: 'w1', p: 0.1, pass: true }, { t: 'w2', p: 0.02, pass: false }, { t: 'w3', p: 0.01, pass: false }
+            ];
+        };
+
+        function EagleSpeculativeSimulator() {
+            // 核心重构：将原本的 useEffect 定时器彻底移除，构建线性的微步骤状态机
+            const STATES = useMemo(() => {
+                const s = [];
+                // 第 0 步：初始静止态
+                s.push({ phase: 0, treeDepth: 0, algoStage: 0, activeRow: -1 });
+                
+                // 第 1 到 21 步：生成阶段（Depth 1 到 3，每个 Depth 包含 algoStage 0 到 6 共 7 帧）
+                for (let d = 1; d <= 3; d++) {
+                    s.push({ phase: 1, treeDepth: d, algoStage: 0, activeRow: -1 }); // 阶段0：挂载准备帧（点变小）
+                    for (let a = 1; a <= 6; a++) {
+                        s.push({ phase: 1, treeDepth: d, algoStage: a, activeRow: -1 });
+                    }
+                }
+                
+                // 第 22 步：平铺连续过渡
+                s.push({ phase: 2, treeDepth: 3, algoStage: 6, activeRow: -1 });
+                
+                // 第 23 到 30 步：Mask并发扫描行 (共8个有效节点)
+                for (let r = 0; r < VALID_NODES.length; r++) {
+                    s.push({ phase: 3, treeDepth: 3, algoStage: 6, activeRow: r });
+                }
+                
+                // 第 31 步：等待对齐校验
+                s.push({ phase: 4, treeDepth: 3, algoStage: 6, activeRow: -1 });
+                // 第 32 步：完成并接收结果
+                s.push({ phase: 5, treeDepth: 3, algoStage: 6, activeRow: -1 });
+                
+                return s;
+            }, []);
+
+            const [stepIndex, setStepIndex] = useState(0);
+            const [isPlaying, setIsPlaying] = useState(false);
+
+            useEffect(() => {
+                if (!isPlaying) return;
+                if (stepIndex === STATES.length - 1) {
+                    setIsPlaying(false);
+                    return;
+                }
+                const timer = window.setTimeout(() => setStepIndex(index => index + 1), 1300);
+                return () => window.clearTimeout(timer);
+            }, [isPlaying, stepIndex, STATES.length]);
+
+            // 从当前帧提取具体的环境状态变量
+            const { phase, treeDepth, algoStage, activeRow } = STATES[stepIndex];
+            const activeMaskNode = phase === 3 ? VALID_NODES[activeRow] : null;
+            const activeMaskKeys = activeMaskNode ? TREE_MASK[activeRow]
+                .map((value, index) => value === 1 ? VALID_NODES[index] : null)
+                .filter(Boolean) : [];
+            const activePrediction = activeMaskNode ? TARGET_PREDICTIONS.find(pred => pred.sourceId === activeMaskNode.id) : null;
+            const activeMaskAccepted = activeMaskNode && ['n1', 'n4', 'n7'].includes(activeMaskNode.id);
+
+            const batchCenterX = phase === 1 
+                ? (treeDepth === 1 ? 260 : treeDepth === 2 ? 430 : 640)
+                : 400;
+
+            // 纯手动步进控制函数
+            const nextStep = () => {
+                if (stepIndex < STATES.length - 1) setStepIndex(stepIndex + 1);
+            };
+
+            const prevStep = () => {
+                if (stepIndex > 0) setStepIndex(stepIndex - 1);
+            };
+
+            const resetStep = () => {
+                setIsPlaying(false);
+                setStepIndex(0);
+            };
+
+            const getActiveParents = () => {
+                if (phase !== 1) return [];
+                if (treeDepth === 1) return [ROOT_NODE];
+                if (treeDepth === 2) return ALL_DRAFT_NODES.filter(n => ['n1', 'n2', 'n3'].includes(n.id));
+                if (treeDepth === 3) return ALL_DRAFT_NODES.filter(n => ['n4', 'n5', 'n6'].includes(n.id));
+                return [];
+            };
+
+            const isParentOfCurrentDepth = (nodeId) => {
+                if (treeDepth === 1 && nodeId === 'root') return true;
+                if (treeDepth === 2 && ['n1', 'n2', 'n3'].includes(nodeId)) return true; 
+                if (treeDepth === 3 && ['n4', 'n5', 'n6'].includes(nodeId)) return true; 
+                return false;
+            };
+
+            const getAlgoDetailText = () => {
+                if (phase !== 1) return "";
+                switch (algoStage) {
+                    case 0: return `取出这一层还活着的节点`;
+                    case 1: return `把这些节点排成一个 batch，好一次送进 GPU`;
+                    case 2: return `小模型用 MLP 算出隐藏状态`;
+                    case 3: return `乘词表，得到每个位置的候选词`;
+                    case 4: return `列出候选词和概率`;
+                    case 5: return `概率低于 0.05 的枝丢掉`;
+                    case 6: return `留下的枝写入 KV，进入下一层`;
+                    default: return "";
+                }
+            };
+
+            const renderTreeEdges = () => {
+                return ALL_DRAFT_NODES.map((node) => {
+                    if (phase === 1) {
+                        if (node.depth > treeDepth) return null;
+                        if (node.depth === treeDepth && algoStage < 4) return null; 
+                    }
+                    const isRootParent = node.parent === 'root';
+                    const parentNode = isRootParent ? ROOT_NODE : ALL_DRAFT_NODES.find(n => n.id === node.parent);
+                    if (!parentNode) return null;
+
+                    const isRejected = phase === 5 && !['n1', 'n4', 'n7'].includes(node.id);
+                    const isAccepted = phase === 5 && !isRejected;
+                    let strokeColor = '#475569';
+                    let strokeDash = 'none';
+                    let lineClasses = "transition-all duration-1000";
+
+                    if (phase === 1) {
+                        if (node.depth < treeDepth && node.isDummy) {
+                            strokeColor = 'rgba(239, 68, 68, 0.3)'; strokeDash = '4,4';
+                        } else if (node.depth === treeDepth) {
+                            if (algoStage === 4) { strokeDash = '5,5'; strokeColor = '#fbbf24'; }
+                            if (algoStage === 5 && node.isDummy) { strokeColor = '#ef4444'; strokeDash = '4,4'; }
+                            if (algoStage === 6) {
+                                if (node.isDummy) { strokeColor = 'rgba(239, 68, 68, 0.3)'; strokeDash = '4,4'; }
+                                else { strokeColor = '#10b981'; }
+                            }
+                        }
+                    } else {
+                        if (node.isDummy) {
+                            strokeColor = 'rgba(239, 68, 68, 0.2)'; strokeDash = '4,4';
+                        } else {
+                            if (isAccepted) strokeColor = '#10b981';
+                            if (isRejected && phase === 5) { strokeColor = '#ef4444'; strokeDash = '5,5'; lineClasses += ' animate-[fadeOut_2s_forwards]'; }
+                        }
+                    }
+                    
+                    const startX = isRootParent ? parentNode.x + 60 : parentNode.x + 65; 
+                    const endX = node.x - 65; 
+                    const strokeWidthValue = (isAccepted || (phase === 1 && algoStage === 6 && node.depth === treeDepth && !node.isDummy)) ? 4 : 2; 
+
+                    return (
+                        <path key={`edge-${node.id}`} d={`M ${startX} ${parentNode.y} C ${startX + 50} ${parentNode.y}, ${endX - 50} ${node.y}, ${endX} ${node.y}`} fill="none" stroke={strokeColor} strokeWidth={strokeWidthValue} strokeDasharray={strokeDash} className={lineClasses} />
+                    );
+                });
+            };
+
+            const renderMicroActionPipeline = () => {
+                if (phase !== 1) return null;
+                const activeNodes = getActiveParents();
+                if (activeNodes.length === 0) return null;
+
+                const tensorBoxY = 45;
+                const mlpBoxY = 125;
+                const projectBoxY = 255; 
+
+                return (
+                    <div className="absolute inset-0 z-40 pointer-events-none transition-all duration-700">
+                        <div className={`transition-opacity duration-500 ${algoStage >= 1 && algoStage <= 3 ? 'opacity-100' : 'opacity-0'}`}>
+                            <div className={`absolute -translate-x-1/2 -translate-y-1/2 w-[420px] h-[50px] border-2 border-dashed rounded-xl transition-all duration-700 flex flex-col items-center justify-start pt-1 bg-cyan-950/20 ${algoStage === 1 ? 'border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.2)]' : 'border-slate-800'}`} style={{left: batchCenterX, top: tensorBoxY}}>
+                                <span className={`text-[12px] font-mono tracking-wider transition-colors ${algoStage === 1 ? 'text-cyan-300' : 'text-slate-600'}`}>1. Node Tensor Batch</span>
+                            </div>
+                            
+                            <div className="absolute w-[2px] h-[20px] bg-slate-800 -translate-x-1/2 transition-all duration-700" style={{left: batchCenterX, top: tensorBoxY + 25}}>
+                                {algoStage === 2 && <div className="w-full bg-indigo-400 animate-[lineDrop_1s_ease-out]" />}
+                            </div>
+
+                            <div className={`absolute -translate-x-1/2 -translate-y-1/2 w-[400px] h-[55px] border-2 rounded-lg transition-all duration-700 flex flex-col items-center justify-start pt-1 bg-indigo-950/30 ${algoStage === 2 ? 'border-indigo-400 shadow-[0_0_25px_rgba(99,102,241,0.3)]' : 'border-slate-800'}`} style={{left: batchCenterX, top: mlpBoxY}}>
+                                <span className={`text-[12px] font-mono tracking-wider transition-colors ${algoStage === 2 ? 'text-indigo-300' : 'text-slate-600'}`}>2. Draft Head (MLP)</span>
+                            </div>
+
+                            <div className="absolute w-[2px] h-[40px] bg-slate-800 -translate-x-1/2 transition-all duration-700" style={{left: batchCenterX, top: mlpBoxY + 28}}>
+                                {algoStage === 3 && <div className="w-full bg-purple-400 animate-[lineDrop_1s_ease-out]" />}
+                            </div>
+
+                            <div className={`absolute -translate-x-1/2 -translate-y-1/2 w-[480px] h-[160px] border-2 border-dashed rounded-xl transition-all duration-700 flex flex-col items-center justify-start pt-1 bg-purple-950/20 ${algoStage === 3 ? 'border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.3)]' : 'border-slate-800'}`} style={{left: batchCenterX, top: projectBoxY}}>
+                                <span className={`text-[12px] font-mono tracking-wider transition-colors ${algoStage === 3 ? 'text-purple-300' : 'text-slate-600'}`}>3. Parallel Mapping (LM Head)</span>
+                                
+                                {algoStage === 3 && (
+                                    <div className="absolute bottom-2 w-[94%] h-[26px] border border-purple-500/30 bg-purple-900/30 rounded flex items-center justify-center overflow-hidden">
+                                        <div className="w-full h-full bg-[linear-gradient(90deg,transparent_2px,#a855f733_2px)] bg-[length:10px_10px] animate-[slideInRight_2s_linear_infinite]"></div>
+                                        <span className="absolute text-purple-300/70 text-[12px] font-mono font-bold tracking-widest">W_vocab × f</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {activeNodes.map((node, index) => {
+                            const spacing = 145; 
+                            const startX = batchCenterX - ((activeNodes.length - 1) * spacing) / 2;
+                            const alignedX = startX + index * spacing;
+                            const candidates = getCandidatesData(node.id);
+
+                            let tokenX = node.x;
+                            let tokenY = node.y;
+                            let content = `v(${node.id})`;
+                            let shapeClass = "w-[64px] h-[28px] rounded flex items-center justify-center font-mono text-sm font-bold transition-all duration-700 shadow-lg";
+                            
+                            if (algoStage === 0) {
+                                shapeClass += " opacity-0 bg-cyan-600 scale-50"; 
+                            } else if (algoStage === 1) {
+                                tokenX = alignedX; tokenY = tensorBoxY + 8;
+                                shapeClass += " opacity-100 bg-cyan-900 border border-cyan-400 text-cyan-200 scale-100";
+                            } else if (algoStage === 2) {
+                                tokenX = alignedX; tokenY = mlpBoxY + 8; content = `h(${node.id})`;
+                                shapeClass += " opacity-100 bg-indigo-900 border border-indigo-400 text-indigo-200 scale-105 !rounded-full";
+                            } else if (algoStage >= 3 && algoStage <= 5) {
+                                tokenX = alignedX; tokenY = projectBoxY - 35; content = `[ f${index+1} ]`;
+                                shapeClass += " opacity-100 bg-purple-900 border border-purple-400 text-purple-200 scale-110 !w-[72px] tracking-widest z-50 transition-all duration-700";
+                            } else if (algoStage >= 6) {
+                                tokenX = alignedX; tokenY = projectBoxY + 80;
+                                shapeClass += " opacity-0 bg-purple-500 scale-150 blur-sm transition-all duration-1000";
+                            }
+
+                            return (
+                                <div key={`anim-token-${node.id}`} className="absolute z-50 transition-all duration-700" style={{left: tokenX, top: tokenY}}>
+                                    <div className={`absolute -translate-x-1/2 -translate-y-1/2 ${shapeClass}`}>{content}</div>
+                                    
+                                    {(algoStage >= 3 && algoStage <= 5) && (
+                                        <div className={`absolute left-1/2 -translate-x-1/2 top-[10px] w-[110px] h-[60px] transition-opacity duration-500 ${algoStage >= 6 ? 'opacity-0' : 'opacity-100'}`}>
+                                            <svg width="110" height="60" className="absolute left-0 top-0 overflow-visible z-40">
+                                                <path d="M 55 6 L 15 34" stroke="#f472b6" strokeWidth="1.5" strokeDasharray="3,3" className={algoStage === 3 ? "animate-[flowDown_0.5s_ease-out_forwards]" : "opacity-50"} />
+                                                <path d="M 55 6 L 55 50" stroke="#f472b6" strokeWidth="1.5" strokeDasharray="3,3" className={algoStage === 3 ? "animate-[flowDown_0.5s_ease-out_forwards]" : "opacity-50"} />
+                                                <path d="M 55 6 L 95 34" stroke="#f472b6" strokeWidth="1.5" strokeDasharray="3,3" className={algoStage === 3 ? "animate-[flowDown_0.5s_ease-out_forwards]" : "opacity-50"} />
+                                            </svg>
+                                            
+                                            {candidates.map((cand, i) => {
+                                                const posClass = i === 0 ? "top-[34px] left-[15px]" : i === 1 ? "top-[50px] left-[55px]" : "top-[34px] left-[95px]";
+                                                const animDelay = i === 0 ? "0.2s" : i === 1 ? "0.3s" : "0.4s";
+                                                
+                                                let boxClass = "";
+                                                let innerContent = null;
+                                                let styleObj = {};
+
+                                                if (algoStage === 3) {
+                                                    boxClass = "bg-pink-950/95 border border-pink-500 text-pink-300 shadow-[0_0_8px_rgba(244,114,182,0.4)] px-1.5 py-0.5 opacity-0";
+                                                    styleObj = { animation: `popInScale 0.3s ${animDelay} forwards` };
+                                                    innerContent = `Top-${i+1}`;
+                                                } else if (algoStage === 4) {
+                                                    boxClass = "bg-slate-900 border border-slate-500 text-slate-300 px-1 py-0.5 shadow-lg scale-110 min-w-[36px] text-center";
+                                                    innerContent = (
+                                                        <div className="flex flex-col items-center leading-[1.1]">
+                                                            <span className="text-[10px] font-bold text-white">{cand.t}</span>
+                                                            <span className="text-[9px] font-mono text-cyan-400">p={cand.p}</span>
+                                                        </div>
+                                                    );
+                                                } else if (algoStage === 5) {
+                                                    if (cand.pass) {
+                                                        boxClass = "bg-emerald-950 border-2 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.6)] px-1 py-0.5 scale-125 min-w-[36px] text-center z-50";
+                                                        innerContent = (
+                                                            <div className="flex flex-col items-center leading-[1.1]">
+                                                                <span className="text-[10px] font-bold text-white">{cand.t}</span>
+                                                                <span className="text-[9px] font-mono text-emerald-400">✓ KEEP</span>
+                                                            </div>
+                                                        );
+                                                    } else {
+                                                        boxClass = "bg-red-950/80 border border-red-800 text-red-400 px-1 py-0.5 min-w-[36px] text-center opacity-30 transform translate-y-[25px] scale-75 grayscale";
+                                                        innerContent = (
+                                                            <div className="flex flex-col items-center leading-[1.1]">
+                                                                <span className="text-[10px] line-through">{cand.t}</span>
+                                                                <span className="text-[9px] font-mono text-red-500">✗ DROP</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                }
+
+                                                return (
+                                                    <div key={i} className={`absolute ${posClass} -translate-x-1/2 -translate-y-1/2 text-[10px] rounded-sm whitespace-nowrap z-50 transition-all duration-700 ${boxClass}`} style={styleObj}>
+                                                        {innerContent}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            let rootBorderClass = 'border-violet-500 shadow-[0_0_20px_rgba(139,92,246,0.3)]';
+            if (phase === 1 && isParentOfCurrentDepth('root')) {
+                if (algoStage === 1) rootBorderClass = 'border-cyan-500';
+                else if (algoStage === 2) rootBorderClass = 'border-indigo-500';
+                else if (algoStage === 3) rootBorderClass = 'border-purple-500';
+                else rootBorderClass = 'border-slate-600 opacity-60'; 
+            }
+
+            return (
+                <div className="flex flex-col min-h-screen bg-[#020617] text-slate-200 font-sans p-6 md:p-8 overflow-x-hidden">
+                    <div className="mb-5 flex justify-between items-end border-b border-slate-800 pb-4">
+                        <div>
+                            <h1 className="text-3xl lg:text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-violet-400 to-cyan-400 flex items-center gap-2">
+                                <Layers className="w-9 h-9 text-violet-400" />
+                                EAGLE-3 逻辑模拟
+                            </h1>
+                            <p className="text-base text-slate-400 mt-2">树注意力掩码 + 目标模型验证，可逐步播放。</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 min-h-[82vh]">
+                        <div className="xl:col-span-6 bg-slate-900/50 border border-slate-800 rounded-2xl p-5 relative overflow-hidden flex flex-col shadow-xl">
+                            <h2 className="text-lg font-bold text-slate-300 uppercase tracking-widest flex items-center gap-2 mb-4 border-b border-slate-800 pb-2 shrink-0">
+                                <GitBranch className="w-6 h-6 text-violet-400" />1. Draft 树展开与 KV 更新
+                            </h2>
+                            <div className="flex-1 bg-slate-950/50 rounded-xl border border-slate-800/50 overflow-x-auto overflow-y-hidden min-h-[760px] custom-scrollbar">
+                                <div className="relative min-w-[820px] min-h-[760px] h-full">
+                               <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+                                   {renderTreeEdges()}
+                               </svg>
+
+                               <div className={`absolute p-4 rounded-xl border bg-slate-900/90 text-base font-mono text-center z-30 transition-all duration-500 ${rootBorderClass}`} style={{ left: ROOT_NODE.x, top: ROOT_NODE.y, transform: 'translate(-50%, -50%)', minWidth: '110px' }}>
+                                   <div className="text-xs text-violet-400 font-bold tracking-wider">ROOT</div>
+                                   <div className="font-bold text-white mt-1 text-lg">{ROOT_NODE.text}</div>
+                               </div>
+
+                               {ALL_DRAFT_NODES.map(node => {
+                                   if (phase === 1) {
+                                       if (node.depth > treeDepth) return null;
+                                       if (node.depth === treeDepth && algoStage < 4) return null;
+                                   }
+                                   
+                                   const isPruned = node.isDummy && (
+                                       phase > 1 || 
+                                       (phase === 1 && treeDepth > node.depth) || 
+                                       (phase === 1 && treeDepth === node.depth && algoStage >= 5)
+                                   );
+
+                                   const isAccepted = phase === 5 && ['n1', 'n4', 'n7'].includes(node.id);
+                                   const isRejected = phase === 5 && !isAccepted;
+
+                                   let borderClass = 'border-slate-700 bg-slate-900/80';
+                                   let animationClass = "animate-[popInFaint_0.4s_ease-out_forwards]";
+
+                                   if (isPruned) {
+                                       borderClass = 'bg-striped-dead';
+                                       animationClass = (phase === 1 && treeDepth === node.depth && algoStage === 5) 
+                                           ? "animate-[shatter_1.5s_ease-in-out_forwards]" 
+                                           : "opacity-30 transform translate-y-[60px] scale-50 filter grayscale"; 
+                                   } else if (isAccepted) {
+                                       borderClass = 'border-emerald-500 bg-emerald-950/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-[saveToCache_1.5s_infinite]';
+                                       animationClass = "";
+                                   } else if (isRejected) {
+                                       borderClass = 'border-red-900 bg-slate-950/40 text-slate-600 opacity-20 line-through';
+                                       animationClass = "animate-[fadeOut_2s_forwards]";
+                                   } else if (phase > 1) {
+                                       animationClass = "animate-[popInSolid_0.3s_forwards]";
+                                   }
+
+                                   return (
+                                       <div key={node.id} className={`absolute p-2.5 rounded-lg border text-sm font-mono z-30 transition-all duration-500 w-[120px] text-center -translate-x-1/2 -translate-y-1/2 ${borderClass} ${animationClass}`} style={{ left: node.x, top: node.y }}>
+                                           <div className="flex justify-between text-xs text-slate-500 mb-1 font-bold">
+                                               <span>{node.id}</span>
+                                               <span className={isPruned ? "text-red-400" : "text-amber-400/80"}>p={node.prob}</span>
+                                           </div>
+                                           <div className="font-semibold text-slate-200 truncate text-base">{node.text}</div>
+                                       </div>
+                                   );
+                               })}
+
+                               {renderMicroActionPipeline()}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="xl:col-span-6 grid grid-rows-[auto_minmax(680px,1fr)] gap-6 h-full">
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 shrink-0 shadow-lg">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-base font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                        <Cpu className="w-5 h-5 text-cyan-400" /> 当前步骤
+                                    </h3>
+                                    
+                                    {/* 核心修改：手动前进后退控制面板 */}
+                                    <div className="flex gap-2 items-center bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                                        <div className="px-3 text-[11px] font-mono text-slate-500 font-bold tracking-widest hidden lg:block">
+                                            STEP: {stepIndex}/{STATES.length - 1}
+                                        </div>
+                                        <div className="h-5 w-px bg-slate-800 hidden lg:block"></div>
+
+                                        <button onClick={() => setIsPlaying(playing => !playing)} disabled={stepIndex === STATES.length - 1} className={`px-3 py-1.5 text-sm font-mono font-bold rounded-lg flex items-center gap-1 transition-all ${stepIndex < STATES.length - 1 ? isPlaying ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-[0_0_15px_rgba(217,119,6,0.3)]' : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_15px_rgba(8,145,178,0.3)]' : 'bg-slate-900 text-slate-700 cursor-not-allowed'}`}>
+                                            <Play className="w-4 h-4" /> {isPlaying ? '暂停' : '慢速播放'}
+                                        </button>
+
+                                        <button onClick={prevStep} disabled={stepIndex === 0} className={`px-3 py-1.5 text-sm font-mono font-bold rounded-lg flex items-center gap-1 transition-all ${stepIndex > 0 ? 'bg-slate-800 hover:bg-slate-700 text-white shadow-lg' : 'bg-slate-900 text-slate-700 cursor-not-allowed'}`}>
+                                            <ChevronLeft className="w-4 h-4" /> 上一步
+                                        </button>
+                                        
+                                        <button onClick={nextStep} disabled={stepIndex === STATES.length - 1} className={`px-4 py-1.5 text-sm font-mono font-bold rounded-lg flex items-center gap-1 transition-all ${stepIndex < STATES.length - 1 ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-[0_0_15px_rgba(139,92,246,0.3)]' : 'bg-slate-900 text-slate-700 cursor-not-allowed'}`}>
+                                            下一步 <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                        
+                                        <div className="h-5 w-px bg-slate-800 ml-1"></div>
+                                        <button onClick={resetStep} className="px-3 py-1.5 text-sm font-mono hover:bg-slate-800 text-slate-400 rounded-lg transition-colors">
+                                            重置
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-5 gap-1.5 text-[12px] font-mono text-center mt-1">
+                                    {[
+                                        { label: "小模型先猜", activePhase: 1, color: "border-violet-500 text-violet-400 bg-violet-950/20" },
+                                        { label: "排成 batch", activePhase: 2, color: "border-cyan-500 text-cyan-400 bg-cyan-950/20" },
+                                        { label: "Tree Mask", activePhase: 3, color: "border-purple-500 text-purple-400 bg-purple-950/20" },
+                                        { label: "大模型核对", activePhase: 4, color: "border-amber-500 text-amber-400 bg-amber-950/20" },
+                                        { label: "留下对的 token", activePhase: 5, color: "border-emerald-500 text-emerald-400 bg-emerald-950/20" }
+                                    ].map((step, idx) => {
+                                        const isCurrent = phase === step.activePhase;
+                                        const isDone = phase > step.activePhase;
+                                        return (
+                                            <div key={idx} className={`p-2 rounded-md border transition-all duration-300 ${isCurrent ? `${step.color} font-bold border-2 shadow-inner` : isDone ? "border-slate-800 text-slate-500 bg-slate-900/40 line-through" : "border-slate-900 text-slate-700"}`}>
+                                                {step.label}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+
+                                {phase === 1 && (
+                                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 bg-slate-950/70 border border-violet-500/40 p-3 rounded-xl animate-[slideInRight_0.4s_ease-out]">
+                                        <div className="col-span-2 flex items-center justify-between gap-3 border-b border-violet-800/50 pb-2">
+                                            <span className="font-bold text-sm text-violet-300 flex items-center gap-1.5"><Code className="w-5 h-5 text-violet-400" /> Depth: {treeDepth}</span>
+                                            <span className="text-[10px] bg-red-900/40 border border-red-500/50 px-2 py-0.5 rounded text-red-200">τ=0.05</span>
+                                        </div>
+                                        <ol className="grid grid-cols-2 xl:grid-cols-3 gap-x-4 gap-y-1 text-[11px] font-mono text-slate-300">
+                                            {[
+                                                { label: 'Tensor Alignment', active: 'text-cyan-300 font-bold', badge: 'bg-cyan-900 text-cyan-400' },
+                                                { label: 'MLP Mapping', active: 'text-indigo-300 font-bold', badge: 'bg-indigo-900 text-indigo-400' },
+                                                { label: 'Parallel Mapping', active: 'text-purple-300 font-bold', badge: 'bg-purple-900 text-purple-400' },
+                                                { label: 'Batch Sample', active: 'text-amber-300 font-bold', badge: 'bg-amber-900 text-amber-400' },
+                                                { label: 'Global Prune', active: 'text-pink-300 font-bold', badge: 'bg-pink-900 text-pink-400' },
+                                                { label: 'Update KVCache', active: 'text-emerald-300 font-bold', badge: 'bg-emerald-900 text-emerald-400' }
+                                            ].map(({ label, active, badge }, index) => (
+                                                <li key={label} className={`flex items-center gap-1.5 transition-all duration-300 ${algoStage === index + 1 ? active : 'opacity-40'}`}>
+                                                    <span className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 text-[10px] ${badge}`}>{index + 1}</span>{label}
+                                                </li>
+                                            ))}
+                                        </ol>
+                                        <div className="col-span-2 bg-slate-900 border border-slate-700/50 px-3 py-2 rounded-lg text-xs text-slate-400 leading-snug">
+                                            {getAlgoDetailText()}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-1 xl:grid-cols-10 gap-6 min-h-[680px]">
+                            <div className="xl:col-span-6 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col h-full min-h-[680px]">
+                                <h3 className="text-base font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-3 border-b border-slate-800 pb-2">
+                                    <Hash className="w-5 h-5 text-purple-400" /> 2. SGLang 融合树注意力掩码 (Tree Attention Mask)
+                                </h3>
+
+                                <div className="flex-1 overflow-visible flex flex-col justify-start items-center bg-slate-950/60 rounded-xl border border-slate-900 p-3">
+                                    {phase < 3 ? (
+                                        <div className="text-sm text-slate-600 font-mono italic animate-pulse">等待拓扑流打平后激活 Tree Attention 拓扑扫描...</div>
+                                    ) : (
+                                        <div className="w-full min-w-[420px] flex flex-col items-center animate-[slideInRight_0.4s_ease-out]">
+                                            <div className="flex w-full max-w-[680px] mb-3 pl-20">
+                                                {VALID_NODES.map((n) => (
+                                                    <span key={`col-h-${n.id}`} className="flex-1 text-center font-mono text-[14px] text-slate-500 font-bold">{n.id}</span>
+                                                ))}
+                                            </div>
+
+                                            <div className="w-full max-w-[680px] space-y-2">
+                                                {TREE_MASK.map((row, rIdx) => {
+                                                    const isScanning = phase === 3 && activeRow === rIdx;
+                                                    return (
+                                                        <div key={`row-${rIdx}`} className={`flex items-center rounded transition-colors duration-300 p-1 ${isScanning ? 'bg-purple-900/30 ring-1 ring-purple-500/50' : ''}`}>
+                                                            <span className="w-20 text-right pr-4 font-mono text-[15px] text-slate-400 font-bold truncate">{VALID_NODES[rIdx].id}</span>
+
+                                                            <div className="flex-1 flex gap-2">
+                                                                {row.map((val, cIdx) => {
+                                                                    let cellClass = "bg-slate-900 border-slate-800 text-slate-700";
+                                                                    if (val === 1) cellClass = "bg-purple-950/80 border-purple-800 text-purple-300 font-bold";
+                                                                    if (isScanning && val === 1) cellClass = "bg-purple-600 text-white font-black border-purple-400 scale-105 shadow-[0_0_15px_rgba(168,85,247,0.7)]";
+                                                                    
+                                                                    return (
+                                                                        <div key={`cell-${rIdx}-${cIdx}`} className={`flex-1 aspect-square border text-base rounded-lg flex items-center justify-center font-mono transition-all duration-300 ${cellClass}`}>
+                                                                            {val}
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            
+                                            <div className="mt-5 text-sm font-mono text-slate-400 w-full max-w-[680px] bg-slate-900/60 border border-slate-800/80 p-3 rounded-lg">
+                                                {phase === 3 ? (
+                                                    <div className="space-y-2 animate-[slideInRight_0.3s_ease-out] text-sm leading-6">
+                                                        <div className="text-purple-300 font-bold flex items-center gap-1.5">
+                                                            <Zap className="w-4 h-4 text-purple-400 shrink-0"/>
+                                                            Row {activeRow}: Query [{activeMaskNode.id}] “{activeMaskNode.text}”
+                                                            <span className="text-slate-400 font-normal">· {activeMaskKeys.map(node => `${node.id}`).join(' → ')}</span>
+                                                        </div>
+                                                        <div className={`border-l-2 pl-3 ${activeMaskAccepted ? 'border-emerald-500 text-emerald-300' : 'border-red-500 text-red-300'}`}>
+                                                            [{activeMaskNode.id}] → Target “{activePrediction?.target ?? '无候选'}” (p={activePrediction?.prob ?? '—'}) · {activeMaskAccepted ? '保留' : '拒绝'}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span>树已编成 Mask。各枝同一次 Forward，互不干扰。</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="xl:col-span-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col h-full min-h-[680px]">
+                                <h3 className="text-base font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-2 border-b border-slate-800 pb-2">
+                                    <CheckCircle2 className="w-5 h-5 text-amber-400" /> 3. 目标模型验证与树路径接收
+                                </h3>
+
+                                <div className="flex-1 space-y-2 overflow-visible font-mono text-sm bg-slate-950/70 p-3.5 rounded-xl border border-slate-900">
+                                    {phase < 3 ? (
+                                        <div className="text-slate-600 italic animate-pulse">等待树注意力掩码拓扑扫描...</div>
+                                    ) : (
+                                        <div className="space-y-2.5">
+                                            {TARGET_PREDICTIONS.map((pred, pIdx) => {
+                                                const sourceNode = VALID_NODES.find(n => n.id === pred.sourceId);
+                                                const isSuccessPath = ['n1', 'n4', 'n7'].includes(pred.sourceId);
+                                                const isActiveMaskPrediction = phase === 3 && pred.sourceId === activeMaskNode?.id;
+                                                const showMatch = phase >= 5 || (phase === 4 && pIdx <= 3);
+
+                                                return (
+                                                    <div key={pIdx} className={`flex justify-between items-center border-b pb-1 animate-[slideInRight_0.3s_ease-out] ${isActiveMaskPrediction ? 'bg-purple-900/30 border-purple-500/60 ring-1 ring-purple-500/40 px-2 rounded' : 'border-slate-900/50'}`}>
+                                                        <div className="flex items-center gap-1.5 truncate max-w-[75%]">
+                                                            <span className="text-slate-500">[{pred.sourceId}]</span>
+                                                            <span className="text-slate-300 font-bold">"{sourceNode?.text}"</span>
+                                                            <span className="text-slate-500">→</span>
+                                                            <span className="text-cyan-400">Target:</span>
+                                                            <span className="text-white font-bold">"{pred.target || pred.text}"</span>
+                                                        </div>
+                                                        
+                                                        {isActiveMaskPrediction ? (
+                                                            <span className="text-[10px] bg-purple-950 text-purple-300 font-bold px-1.5 py-0.5 rounded border border-purple-500 flex items-center gap-0.5">ROW {activeRow}</span>
+                                                        ) : showMatch ? (
+                                                            isSuccessPath ? (
+                                                                <span className="text-[12px] bg-emerald-950 text-emerald-400 font-bold px-2 py-0.5 rounded border border-emerald-800 flex items-center gap-0.5">
+                                                                    <CheckCircle2 className="w-3 h-3"/> ACCEPT
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[12px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-900 flex items-center gap-0.5 opacity-60">
+                                                                    <XCircle className="w-3 h-3"/> REJECT
+                                                                </span>
+                                                            )
+                                                        ) : (
+                                                            <span className="text-[12px] text-amber-400 animate-pulse">校对中...</span>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {phase === 5 && (
+                                                <div className="mt-2 bg-emerald-950/30 border border-emerald-500/30 p-2.5 rounded-lg text-emerald-400 animate-[popInScale_0.4s_ease-out]">
+                                                    <div className="font-bold flex items-center gap-1 text-[14px]">
+                                                        <Database className="w-5 h-5 text-emerald-400" /> 本次迭代接收成功！
+                                                    </div>
+                                                    <div className="text-[13px] text-emerald-500/80 mt-1.5 leading-relaxed">
+                                                        树节点有效路径为 <span className="font-bold underline">root → n1 → n4 → n7</span>。单次 Forward 直接提交了 <span className="font-bold text-white bg-emerald-800 px-1.5 rounded">4 个 Token</span>，解码效率提升 400%！
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<EagleSpeculativeSimulator />);
+    </script>
+</body>
+</html>
