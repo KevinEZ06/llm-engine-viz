@@ -119,7 +119,7 @@
       },
       {
         k: "II.8 前缀", s: "Radix",
-        cap: "共用 system prompt 时：前缀树节点加锁，不用的按 LRU 淘汰。",
+        cap: "共用 system prompt 时：共享前缀；不用的缓存按最久没用淘汰。",
         href: "radix.html", go: "打开 Radix"
       },
       {
@@ -148,17 +148,17 @@
 
     const ZTS_LESSONS = [
       { tag: "I.1", ok: false, title: "LLM 入门", why: "Transformer、自回归。", links: [], skip: true },
-      { tag: "I.2", ok: false, title: "推理入门", why: "同卡 Prefill / Decode、算力界还是显存界、Roofline。", links: [[CH.i2, "读正文"]] },
+      { tag: "I.2", ok: false, title: "推理入门", why: "同卡 Prefill / Decode；是算力不够还是显存带宽不够。", links: [[CH.i2, "读正文"]] },
       { tag: "I.3", ok: false, title: "GPU 入门", why: "SM、内存层次。", links: [[CH.i3, "读正文"]] },
       { tag: "I.4", ok: true, title: "KV Cache", why: "生命周期与显存；本页从分页和抢占讲起。", links: [["PagedAttention.html", "Paged KV"], ["cacheschedule.html", "调度"]] },
       { tag: "I.5", ok: true, title: "Benchmark", why: "TTFT / TPOT / ITL、吞吐和 Goodput、尾延迟。", links: [["batching.html", "连续批"]] },
       { tag: "II.2", ok: true, title: "Path of a Request", why: "从入口到输出经过哪些环节。", links: [["journey.html", "journey"]] },
       { tag: "II.6", ok: true, title: "Continuous Batching", why: "batch 有空位就补进新请求；短请求别被长 Prefill 堵住。", links: [["batching.html", "连续批"]] },
-      { tag: "II.7", ok: true, title: "Paged KV", why: "逻辑块对物理页；不够就 Swap / Recompute。", links: [["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
-      { tag: "II.8", ok: true, title: "RadixAttention", why: "前缀树、加锁、LRU。", links: [["radix.html", "Radix"]] },
+      { tag: "II.7", ok: true, title: "Paged KV", why: "KV 分页存；不够就换出或重算。", links: [["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
+      { tag: "II.8", ok: true, title: "RadixAttention", why: "共享前缀；不用的缓存按最久没用淘汰。", links: [["radix.html", "Radix"]] },
       { tag: "II.9 / III.4", ok: true, title: "TP / DP / EP / CP", why: "怎么切、怎么通信。", links: [["parallel.html", "parallel"], ["ring_attention.html", "Ring"]] },
       { tag: "II.10", ok: true, title: "Speculative Decoding", why: "先猜再核：draft → verify → accept。", links: [["mtp.html", "mtp"]] },
-      { tag: "III.5", ok: true, title: "PD Disaggregation", why: "分卡 + KVPoll。不是 I.2 的同卡两阶段。", links: [["kvpd.html", "KVPoll"], ["pipeline.html", "路由"]] }
+      { tag: "III.5", ok: true, title: "PD Disaggregation", why: "Prefill/Decode 分机器；别和同卡两阶段搞混。", links: [["kvpd.html", "KVPoll"], ["pipeline.html", "路由"]] }
     ];
 
     let cur = 0;
