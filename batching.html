@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>短请求被挡住了 · 静态批 / 连续批 / chunk</title>
+  <title>请求的处理顺序 · 静态批 / 连续批 / chunk</title>
   <style>
     :root {
       --bg: #0b1220;
@@ -38,7 +38,6 @@
       color: #c4b5fd; background: #1e1b4b; border: 1px solid #5b21b6;
       border-radius: 999px; padding: .12rem .55rem;
     }
-    .lead { margin: 0 0 .7rem; color: var(--muted); font-size: .88rem; line-height: 1.5; }
     a { color: var(--blue); }
     .controls { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: .85rem; align-items: center; }
     button {
@@ -62,7 +61,6 @@
     .status p { margin: 0; line-height: 1.45; color: #dbeafe; font-size: .88rem; }
 
     .gantt h2, .cmp h2, .refill h2 { margin: 0 0 .35rem; font-size: .9rem; color: var(--muted); font-weight: 600; }
-    .hint { margin: 0 0 .65rem; font-size: .78rem; color: var(--muted); line-height: 1.45; }
 
     .cmp {
       background: var(--panel); border: 1px solid var(--border);
@@ -177,6 +175,7 @@
     }
     .spark-plot.wait .spark-title { color: #fbbf24; }
     .spark-plot.run .spark-title { color: #67e8f9; }
+    .spark-plot.decode .spark-title { color: #c4b5fd; }
     .spark-y {
       grid-area: y;
       display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
@@ -198,6 +197,8 @@
     .spark.wait b.on { background: #fbbf24; }
     .spark.run b { background: #155e75; }
     .spark.run b.on { background: #67e8f9; }
+    .spark.decode b { background: #4c1d95; }
+    .spark.decode b.on { background: #c4b5fd; }
     .spark-x {
       display: flex; justify-content: space-between; align-items: baseline;
       font-size: .58rem; font-weight: 700; color: #94a3b8;
@@ -303,27 +304,17 @@
       color: #ede9fe; background: #5b21b6; border-color: #c4b5fd;
     }
 
-    .legend { display: flex; flex-wrap: wrap; gap: .75rem; font-size: .75rem; color: var(--muted); margin: .7rem 0 1rem; }
+    .legend { display: flex; flex-wrap: wrap; gap: .75rem; font-size: .75rem; color: var(--muted); margin: .75rem 0 0; }
     .legend i { display: inline-block; width: .85rem; height: .85rem; border-radius: .2rem; margin-right: .25rem; vertical-align: -2px; }
     .links { margin-top: 1rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
   </style>
 </head>
 <body>
   <div class="page">
-    <h1>短请求被挡住了：静态批 / 连续批 / chunk</h1>
+    <h1>请求的处理顺序：静态批 / 连续批 / chunk</h1>
     <div class="lesson">
       <span>I.5 Benchmark</span>
       <span>II.6 Continuous Batching</span>
-    </div>
-    <p class="lead">
-      黄点排队越长 = 尾延迟越差；空椅闪黄、箭头往里走 = Continuous Batching。
-      并发高吞吐高，但 S1 晚出字就不算 Goodput。紫框只扫时间表。
-    </p>
-    <div class="legend">
-      <span><i style="background:#0e7490"></i>算 · 在算 prompt</span>
-      <span><i style="background:#6d28d9"></i>吐 · 在吐字（首 = 第一个字）</span>
-      <span><i style="background:#334155;background-image:repeating-linear-gradient(135deg,#1e293b,#1e293b 4px,#334155 4px,#334155 8px)"></i>空 · 不占用 GPU</span>
-      <span><i style="background:#0f291c;border:1px solid #14532d"></i>完 · 这条结束</span>
     </div>
     <div class="controls">
       <div class="mode" id="mode">
@@ -342,7 +333,7 @@
         <div class="refill-col">
           <div class="refill-people" id="refillQ"></div>
           <div class="spark-plot wait">
-            <div class="spark-title">排队人数（门外）</div>
+            <div class="spark-title">排队人数</div>
             <div class="spark-y"><i>4</i><i>0</i></div>
             <div class="spark-pane">
               <div class="spark wait" id="sparkWait"></div>
@@ -354,7 +345,7 @@
         <div class="refill-col win" id="refillWinBox">
           <div class="refill-people" id="refillWin"></div>
           <div class="spark-plot run">
-            <div class="spark-title">窗口人数（在算）</div>
+            <div class="spark-title">在算 prompt</div>
             <div class="spark-y"><i>4</i><i>0</i></div>
             <div class="spark-pane">
               <div class="spark run" id="sparkRun"></div>
@@ -365,27 +356,40 @@
         <div class="refill-arr">→</div>
         <div class="refill-col">
           <div class="refill-people" id="refillDone"></div>
+          <div class="spark-plot decode">
+            <div class="spark-title">在吐字</div>
+            <div class="spark-y"><i>4</i><i>0</i></div>
+            <div class="spark-pane">
+              <div class="spark decode" id="sparkDecode"></div>
+              <div class="spark-x" id="sparkDecodeX"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="strip-foot" id="stripFoot"></div>
     </div>
 
     <div class="cmp">
-      <h2>S1 第一个字出现在第几拍</h2>
-      <p class="hint">柱顶数字 = TTFT。第 2 拍内出字才算 Goodput。</p>
+      <h2>S1 首字出现拍数</h2>
       <div class="cmp-plot" id="ttftPlot">
         <div id="ttftBars"></div>
       </div>
     </div>
 
     <div class="gantt">
-      <h2>时间表 · 紫框 = 当前拍</h2>
+      <h2>时间表</h2>
       <div class="gantt-board" id="ganttBoard">
         <table class="g" id="gantt"></table>
         <div class="scan" id="scan">
-          <span class="scan-lab">GPU 窗口</span>
+          <span class="scan-lab">当前拍</span>
         </div>
       </div>
+    <div class="legend">
+      <span><i style="background:#0e7490"></i>算 · 在算 prompt</span>
+      <span><i style="background:#6d28d9"></i>吐 · 在吐字（首 = 第一个字）</span>
+      <span><i style="background:#334155;background-image:repeating-linear-gradient(135deg,#1e293b,#1e293b 4px,#334155 4px,#334155 8px)"></i>空 · 不占用 GPU</span>
+      <span><i style="background:#0f291c;border:1px solid #14532d"></i>完 · 这条结束</span>
+    </div>
     </div>
 
     <p class="links">
@@ -460,50 +464,50 @@
     const SLA_FD = 2;
 
     const INTRO = {
-      static: "空椅上锁，人进不去。",
-      hog: "一人占窗，队伍堆着。",
-      chunk: "空椅闪黄，人往里补。"
+      static: "空位锁住，人进不去。",
+      hog: "一人占着 GPU，队伍在堆。",
+      chunk: "空位闪黄，可以往里补人。"
     };
 
     const BEAT = {
       static: [
         "四人同时在算。",
-        "S 算完了，椅上锁。",
+        "S 算完了，空位锁住。",
         "只剩 L，队伍在堆。",
         "L 独占。",
-        "尾巴还在。",
+        "L 还没算完。",
         "S 已超 SLA。",
         "这才一起吐字。",
-        "窗口满了，第一口晚了。",
+        "座位满了，首字晚了。",
         "继续吐。",
         "S1 结束。"
       ],
       hog: [
         "一人在算，三人在等。",
-        "S1 想吐，窗还给别人。",
-        "M 占窗，短请求被挡。",
-        "吞吐 1，队长 3。",
+        "S1 想吐字，GPU 还被别人占着。",
+        "M 占着 GPU，短请求被挡。",
+        "吞吐 1，排队 3。",
         "L 开始独占。",
-        "空椅上锁。",
-        "队长不降。",
+        "空位锁住。",
+        "排队人数不降。",
         "还在等。",
         "还在等。",
         "L 最后一块。",
         "这才一起吐字。",
-        "窗口满了。",
+        "座位满了。",
         "继续吐。",
         "S1 结束。"
       ],
       chunk: [
-        "空椅在闪，下一步能补。",
-        "S1 出字，S2 坐下。",
-        "吞吐升，队长降。",
+        "空位在闪，下一步可以补人。",
+        "S1 出字，S2 进来。",
+        "吞吐升，排队降。",
         "短请求继续吐。",
         "L 只切一块。",
         "短请求离开。",
-        "尾巴没被短请求拉长。",
+        "L 的尾延迟没被短请求拉长。",
         "只剩 L。",
-        "L chunk。",
+        "L 再切一块。",
         "L 最后一块。",
         "L 开始吐。",
         "L 吐字。",
@@ -548,17 +552,18 @@
     }
 
     function statsAt(modeId, beat) {
-      if (beat < 0) return { running: 0, waiting: 0, fillable: 0, locked: 0 };
+      if (beat < 0) return { prefill: 0, decode: 0, running: 0, waiting: 0, fillable: 0, locked: 0 };
       const s = SCHED[modeId];
-      let running = 0, waiting = 0, fillable = 0, locked = 0;
+      let prefill = 0, decode = 0, waiting = 0, fillable = 0, locked = 0;
       NAMES.forEach(n => {
         const ph = phaseAt(s, n.id, beat);
-        if (ph === "P" || ph === "D") running++;
+        if (ph === "P") prefill++;
+        if (ph === "D") decode++;
         if (ph === "W" || ph === "B") waiting++;
         if (ph === "B") locked++;
         if (modeId === "chunk" && ph === "W") fillable++;
       });
-      return { running, waiting, fillable, locked };
+      return { prefill, decode, running: prefill + decode, waiting, fillable, locked };
     }
 
     function render() {
@@ -613,11 +618,11 @@
 
     function sparkHtml(kind, showT) {
       const cols = axisLen();
-      const unit = kind === "wait" ? "排队" : "窗口";
+      const unit = kind === "wait" ? "排队" : (kind === "decode" ? "在吐字" : "在算 prompt");
       let html = "";
       for (let i = 0; i < cols; i++) {
         const st = statsAt(mode, i);
-        const n = kind === "wait" ? st.waiting : st.running;
+        const n = kind === "wait" ? st.waiting : (kind === "decode" ? st.decode : st.prefill);
         const h = n === 0 ? 6 : (n / 4 * 100);
         html += "<b class='" + (i === showT ? "on" : "") + "' style='height:" + h + "%' title='第 " + i + " 拍 · " + unit + " " + n + " 人'></b>";
       }
@@ -661,14 +666,18 @@
       arr.textContent = blocked ? "✕" : "→";
       const box = document.getElementById("refillWinBox");
       box.className = "refill-col win" + (canFill ? " go" : (blocked ? " no" : ""));
+      const stNow = idle ? { prefill: 0, decode: 0 } : statsAt(mode, showT);
       document.getElementById("sparkWait").innerHTML = sparkHtml("wait", showT);
       document.getElementById("sparkRun").innerHTML = sparkHtml("run", showT);
+      document.getElementById("sparkDecode").innerHTML = sparkHtml("decode", showT);
       const x = sparkXHtml(showT);
       document.getElementById("sparkWaitX").innerHTML = x;
       document.getElementById("sparkRunX").innerHTML = x;
+      document.getElementById("sparkDecodeX").innerHTML = x;
       document.getElementById("stripFoot").innerHTML =
         '<span class="pill' + (q.length >= 2 ? " warn" : "") + '">等 ' + q.length + "</span>" +
-        '<span class="pill">算 ' + win.length + "</span>" +
+        '<span class="pill">算 ' + stNow.prefill + "</span>" +
+        '<span class="pill">吐 ' + stNow.decode + "</span>" +
         '<span class="pill' + (canFill ? " hot" : "") + '">' + (canFill ? "补位" : (blocked ? "上锁" : "—")) + "</span>" +
         '<span class="pill' + (hit ? " ok" : "") + '">S1 · 第 ' + fd + " 拍</span>" +
         '<span class="pill' + (good ? " ok" : " warn") + '">' + (good ? "Goodput" : "超 SLA") + "</span>";
