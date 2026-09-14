@@ -6,6 +6,8 @@
 
 **在线入口：** https://kevinez06.github.io/llm-engine-viz/
 
+<img src="./images/llm-engine-viz.gif" alt="Ring Attention 可视化" width="800">
+
 ## 页面
 
 | 页面 | 讲什么 |
