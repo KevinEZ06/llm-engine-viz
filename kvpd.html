@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PD 分离 · KVPoll 状态机</title>
+    <title>PD 分离 · KVPoll 状态模拟</title>
     <style>
         :root {
             --bg: #0b0f19;
@@ -84,8 +84,8 @@
 
     <div class="header">
         <h2>PD 分离 · KVPoll 状态机</h2>
-        <div style="font-size: 13px; color: #888;">Router 扇出到 P/D；D 侧 KVPoll 五色状态逐步点亮</div>
-        <button id="startBtn" onclick="runSimulation()" style="margin-top:15px;">启动推演</button>
+        <div style="font-size: 13px; color: #888;">Router 同时打到 P 和 D；看 D 侧 KVPoll 五色状态</div>
+        <button id="startBtn" onclick="runSimulation()" style="margin-top:15px;">开始</button>
     </div>
 
     <div class="plane-container" id="container">
@@ -94,16 +94,14 @@
             <div class="entry-zone">
                 <div class="box client-box" id="node-client">
                     <div class="box-title">👤 Client</div>
-                    <div style="font-size: 11px; color:#aaa;">发送 10W 字长文本请求</div>
+                    <div style="font-size: 11px; color:#aaa;">发一条很长的请求</div>
                 </div>
                 
                 <div class="box router-box" id="node-router">
                     <div class="box-title" style="color: var(--router);">🌐 Global Router</div>
-                    <div style="font-size: 12px; font-family: monospace; color:#fff;">
-                        asyncio.gather(<br>
-                        &nbsp;&nbsp;send_to_P(),<br>
-                        &nbsp;&nbsp;send_to_D()<br>
-                        )
+                    <div style="font-size: 12px; color:#fff; line-height: 1.55;">
+                        同时发给 Prefill<br>
+                        和 Decode
                     </div>
                 </div>
             </div>
@@ -111,20 +109,20 @@
             <div class="pd-zone">
                 <div class="instance-card inst-p" id="inst-p-box">
                     <div class="inst-header">
-                        <div class="inst-title">🔥 P-Instance (重型计算)</div>
-                        <div style="font-size: 11px; color: #888;">专职负责计算密集型的 Prompt 预填充</div>
+                        <div class="inst-title">🔥 P-Instance (算 Prompt)</div>
+                        <div style="font-size: 11px; color: #888;">算 Prompt，写出这条请求的 KV</div>
                     </div>
                     <div class="pipeline">
                         <div class="node" id="p-tok">Tokenizer<br>分词</div>
                         <div class="node" id="p-queue">Queue<br>排队</div>
-                        <div class="node" id="p-chunk" style="border-color: var(--p-color);">Chunked Prefill<br>分块矩阵计算</div>
-                        <div class="node" id="p-send">Network Tx<br>发射 KV</div>
+                        <div class="node" id="p-chunk" style="border-color: var(--p-color);">Chunked Prefill<br>分块算 Prefill</div>
+                        <div class="node" id="p-send">Network Tx<br>发出 KV</div>
                     </div>
                 </div>
 
                 <div class="instance-card inst-d" id="inst-d-box">
                     <div class="inst-header">
-                        <div class="inst-title">⚡ D-Instance (访存与生成)</div>
+                        <div class="inst-title">⚡ D-Instance (读 KV、吐字)</div>
                         <div class="kvpoll-badge" id="kvpoll-badge">
                             KVPoll State: 
                             <div class="kvpoll-dot" id="kvpoll-dot"></div>
@@ -133,9 +131,9 @@
                     </div>
                     <div class="pipeline">
                         <div class="node" id="d-tok">Tokenizer<br>分词</div>
-                        <div class="node" id="d-alloc" style="border-color: var(--d-color);">Prealloc<br>握手与预留显存</div>
-                        <div class="node" id="d-recv">Network Rx<br>接收 KV/首Token</div>
-                        <div class="node" id="d-decode">Continuous Batching<br>循环 Decode</div>
+                        <div class="node" id="d-alloc" style="border-color: var(--d-color);">Prealloc<br>预留显存</div>
+                        <div class="node" id="d-recv">Network Rx<br>接收 KV / 首 Token</div>
+                        <div class="node" id="d-decode">Continuous Batching<br>连续 Decode</div>
                     </div>
                 </div>
             </div>
@@ -144,7 +142,7 @@
     </div>
 
     <div class="terminal" id="term">
-        <div><span class="log-time">[System]</span> 引擎初始化。PD 节点已分离，等待 Router 指令。</div>
+        <div><span class="log-time">[System]</span> 就绪。P / D 已分开，等 Router 发请求。</div>
     </div>
 
     <script>
@@ -259,12 +257,12 @@
             setKVPoll('Idle', '#555');
 
             // --- Step 1: Initial Request ---
-            log("👤 <b>[Step 1]</b> Client 发送超长推理请求。");
+            log("👤 <b>[Step 1]</b> Client 发来一条很长的请求。");
             spawnToken('node-client', 'node-router', '#fff', 600);
             await wait(700);
 
             // --- Step 2: Concurrent Fan-out ---
-            log("<span class='log-router'>🌐 <b>[Step 2]</b> Router 并发扇出 (Fan-out)</span>: 调用 <code>asyncio.gather</code> 兵分两路下发指令！");
+            log("<span class='log-router'>🌐 <b>[Step 2]</b> Router 并发扇出 (Fan-out)</span>：同时通知 Prefill 和 Decode。");
             document.getElementById('node-router').style.boxShadow = "0 0 30px rgba(88,166,255,0.6)";
             
             // 同时发射两个 Token
@@ -273,44 +271,44 @@
             
             // D节点立刻感知
             setKVPoll('Bootstrapping', 'var(--kv-amber)');
-            log("<span class='log-d'>⚡ [D-Instance]</span> 收到预警！KVPoll 进入 <span style='color:var(--kv-amber)'>Bootstrapping (琥珀色)</span> 状态。");
+            log("<span class='log-d'>⚡ [D-Instance]</span> 收到通知。KVPoll 进入 <span style='color:var(--kv-amber)'>Bootstrapping</span>。");
             await wait(900);
             document.getElementById('node-router').style.boxShadow = "0 0 15px rgba(88,166,255,0.1)";
 
             // --- Step 3: Parallel Prep ---
-            log("⚙️ <b>[Step 3]</b> P 与 D 并行准备阶段...");
+            log("⚙️ <b>[Step 3]</b> P 和 D 各自准备…");
             actNode('p-tok', 800);
             actNode('d-tok', 800);
             await wait(800);
             
             actNode('p-queue', 800);
             actNode('d-alloc', 1200);
-            log("<span class='log-p'>🔥 [P-Instance]</span> 进入排队等待空闲算力。");
-            log("<span class='log-d'>⚡ [D-Instance]</span> 执行 <b>Prealloc (预分配)</b>：在显存中为空降的 KV 划出专用槽位。");
+            log("<span class='log-p'>🔥 [P-Instance]</span> 进 Queue，等空闲算力。");
+            log("<span class='log-d'>⚡ [D-Instance]</span> 做 <b>Prealloc</b>：先留好显存，等 KV 过来。");
             await wait(600);
 
             // --- Step 4: Compute & Wait ---
             setKVPoll('WaitingForInput', 'var(--kv-gray)');
-            log("<span class='log-d'>⚡ [D-Instance]</span> 显存预留完毕。KVPoll 陷入 <span style='color:var(--kv-gray)'>WaitingForInput (灰色)</span> 苦等 P 节点算完。");
+            log("<span class='log-d'>⚡ [D-Instance]</span> 显存留好了。KVPoll 变成 <span style='color:var(--kv-gray)'>WaitingForInput</span>，等 P 算完。");
             
-            log("<span class='log-p'>🔥 [P-Instance]</span> 开始 <b>Chunked Prefill</b> 重型矩阵计算！");
+            log("<span class='log-p'>🔥 [P-Instance]</span> 开始 <b>Chunked Prefill</b>，一块一块算。");
             for(let i=0; i<3; i++){
                 actNode('p-chunk', 400);
-                log(`<span class='log-p'>&nbsp;&nbsp;↳ 处理 Chunk #${i+1}...</span>`);
+                log(`<span class='log-p'>&nbsp;&nbsp;↳ 算 Chunk #${i+1}…</span>`);
                 await wait(500);
             }
             await wait(400);
 
             // --- Step 5: KV Transfer ---
-            log("🚀 <b>[Step 4]</b> P 节点算完，打开高速网络通道！");
+            log("🚀 <b>[Step 4]</b> P 算完了，开始传 KV。");
             actNode('p-send');
             actNode('d-recv');
             
             setKVPoll('Transferring', 'var(--kv-blue)');
-            log("<span class='log-d'>⚡ [D-Instance]</span> 检测到数据流！KVPoll 跃升为 <span style='color:var(--kv-blue)'>Transferring (蓝色)</span>。");
+            log("<span class='log-d'>⚡ [D-Instance]</span> 开始收数据。KVPoll 变成 <span style='color:var(--kv-blue)'>Transferring</span>。");
             
             const beam = drawBeam('p-send', 'd-recv', 'var(--kv-blue)');
-            log("<span class='log-kv'>&nbsp;&nbsp;[网络] 正在进行大规模 KV Cache 张量跨节点传输...</span>");
+            log("<span class='log-kv'>&nbsp;&nbsp;[网络] 把这条请求的 KV Cache 传到 D…</span>");
             await wait(2000);
 
             // --- Step 6: Handover ---
@@ -319,25 +317,25 @@
             document.getElementById('d-recv').classList.remove('active-node');
 
             setKVPoll('Success', 'var(--kv-green)');
-            log("<span class='log-d'>⚡ [D-Instance]</span> <b>[Step 6] 交接完成！</b>");
-            log("<span class='log-d'>&nbsp;&nbsp;↳ D 节点从 Metadata 中提取到『首 Token』。</span>");
-            log("<span class='log-d'>&nbsp;&nbsp;↳ KVPoll 亮起 <span style='color:var(--kv-green)'>Success (绿色)</span>。握手大获全胜！</span>");
+            log("<span class='log-d'>⚡ [D-Instance]</span> <b>[Step 6] 交接完成</b>");
+            log("<span class='log-d'>&nbsp;&nbsp;↳ D 从 Metadata 里拿到首 Token。</span>");
+            log("<span class='log-d'>&nbsp;&nbsp;↳ KVPoll 变成 <span style='color:var(--kv-green)'>Success</span>。</span>");
             await wait(1200);
 
             // --- Step 7: Stream Output ---
             setKVPoll('Decoding', 'var(--kv-purple)');
-            log("🟣 <b>[Step 7]</b> D 节点全面接管计算链，进入 <span style='color:var(--kv-purple)'>Decoding (紫色)</span> 生成循环。");
+            log("🟣 <b>[Step 7]</b> D 开始 <span style='color:var(--kv-purple)'>Decoding</span>，吐字。");
             
             for(let i=0; i<4; i++){
                 actNode('d-decode', 300);
                 // 模拟向外流式返回 token： D -> Router -> Client
                 spawnToken('d-decode', 'node-router', 'var(--d-color)', 400);
                 setTimeout(() => spawnToken('node-router', 'node-client', '#fff', 400), 400);
-                log(`<span class='log-d'>&nbsp;&nbsp;↳ 预测生成 Token，流式 (Streaming) 穿透返回给 Client...</span>`);
+                log(`<span class='log-d'>&nbsp;&nbsp;↳ 吐出一个 Token，经 Router 流式送回 Client…</span>`);
                 await wait(900);
             }
 
-            log("✅ <b>全链路推演结束。</b>PD 分离与 KVPoll 状态机完成 Prefill/Decode 流水线重叠。");
+            log("✅ <b>跑完。</b>Prefill 在 P，Decode 在 D；中间靠 KVPoll 交接。");
             btn.disabled = false;
         }
     </script>
