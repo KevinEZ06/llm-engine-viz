@@ -1,8 +1,8 @@
 # llm-engine-viz
 
-交互式 LLM 推理可视化：RadixAttention、Paged KV Cache、Continuous Batching、PD 分离、EAGLE-3、Ring Attention、DP/TP/EP/CP 等。浏览器打开即可，无需 GPU、无需构建。
+交互式 LLM 推理可视化：RadixAttention、Paged KV Cache、Continuous Batching、PD 分离、推测解码、Ring Attention、DP/TP/EP/CP 等。浏览器打开即可，无需 GPU、无需构建。
 
-可作为 [zero-to-sglang](https://github.com/datawhalechina/zero-to-sglang) 的**章节引子**：先看动画建立直觉，再读正文。
+配合 [zero-to-sglang](https://github.com/datawhalechina/zero-to-sglang)：先看动画，再读正文。
 
 **在线入口：** https://kevinez06.github.io/llm-engine-viz/
 
@@ -33,7 +33,7 @@
 
 图例：**已有** = 本仓库已有页面 · **没有** = 尚未制作 · **部分已有** = 只覆盖该章一部分
 
-| 顺序 | 课程章节 | 章节状态 | 覆盖 | 可视化 | 引子看什么 |
+| 顺序 | 课程章节 | 章节状态 | 覆盖 | 可视化 | 看什么 |
 |------|----------|----------|------|--------|------------|
 | 1 | Part 0 · 0.1 编码伦理与开源精神 | ✅ | 没有 | — | 不计划可视化 |
 | 2 | Part 0 · 0.2 部署第一个 SGLang 服务 | ✅ | 没有 | — | 实操暂不计划可视化 |
