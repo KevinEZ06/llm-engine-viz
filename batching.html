@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>请求的处理顺序 · 静态批 / 连续批 / chunk</title>
+  <title>请求的处理顺序</title>
   <style>
     :root {
       --bg: #0b1220;
@@ -311,7 +311,7 @@
 </head>
 <body>
   <div class="page">
-    <h1>请求的处理顺序：静态批 / 连续批 / chunk</h1>
+    <h1>请求的处理顺序</h1>
     <div class="lesson">
       <span>I.5 Benchmark</span>
       <span>II.6 Continuous Batching</span>
@@ -357,7 +357,7 @@
         <div class="refill-col">
           <div class="refill-people" id="refillDone"></div>
           <div class="spark-plot decode">
-            <div class="spark-title">在吐字</div>
+            <div class="spark-title">输出 token</div>
             <div class="spark-y"><i>4</i><i>0</i></div>
             <div class="spark-pane">
               <div class="spark decode" id="sparkDecode"></div>
@@ -386,7 +386,7 @@
       </div>
     <div class="legend">
       <span><i style="background:#0e7490"></i>算 · 在算 prompt</span>
-      <span><i style="background:#6d28d9"></i>吐 · 在吐字（首 = 第一个字）</span>
+      <span><i style="background:#6d28d9"></i>出 · 输出 token（首 = 第一个字）</span>
       <span><i style="background:#334155;background-image:repeating-linear-gradient(135deg,#1e293b,#1e293b 4px,#334155 4px,#334155 8px)"></i>空 · 不占用 GPU</span>
       <span><i style="background:#0f291c;border:1px solid #14532d"></i>完 · 这条结束</span>
     </div>
@@ -408,13 +408,13 @@
     ];
 
     const MODES = [
-      { id: "static", label: "静态批", sub: "整批凑齐才吐字" },
+      { id: "static", label: "静态批", sub: "整批凑齐才输出 token" },
       { id: "hog", label: "连续批（独占）", sub: "长 Prefill 不切块" },
       { id: "chunk", label: "连续批 + chunk", sub: "每拍只切一块长 Prefill" }
     ];
 
-    const CELL_TXT = { P: "算", D: "吐", B: "空", F: "完", W: "" };
-    const CELL_TIP = { P: "在算 prompt", D: "在吐字", B: "不占用 GPU", F: "已结束", W: "还没开始" };
+    const CELL_TXT = { P: "算", D: "出", B: "空", F: "完", W: "" };
+    const CELL_TIP = { P: "在算 prompt", D: "输出 token", B: "不占用 GPU", F: "已结束", W: "还没开始" };
     const SCHED = {
       static: [
         { S1: "P", S2: "P", M1: "P", L1: "P" },
@@ -464,53 +464,53 @@
     const SLA_FD = 2;
 
     const INTRO = {
-      static: "空位锁住，人进不去。",
-      hog: "一人占着 GPU，队伍在堆。",
-      chunk: "空位闪黄，可以往里补人。"
+      static: "空位锁住，新请求进不来。",
+      hog: "一人占着 GPU，排队在增加。",
+      chunk: "空位高亮，可以补进新请求。"
     };
 
     const BEAT = {
       static: [
-        "四人同时在算。",
-        "S 算完了，空位锁住。",
-        "只剩 L，队伍在堆。",
-        "L 独占。",
-        "L 还没算完。",
+        "四人同时在算 prompt。",
+        "短请求算完 prompt，空位锁住。",
+        "只剩 L，排队在增加。",
+        "L 独占 GPU。",
+        "L 还没算完 prompt。",
         "S 已超 SLA。",
-        "这才一起吐字。",
-        "座位满了，首字晚了。",
-        "继续吐。",
+        "这才一起开始输出 token。",
+        "批次满了，首字晚了。",
+        "继续输出 token。",
         "S1 结束。"
       ],
       hog: [
-        "一人在算，三人在等。",
-        "S1 想吐字，GPU 还被别人占着。",
+        "一人在算 prompt，三人在等。",
+        "S1 想输出 token，GPU 还被别人占着。",
         "M 占着 GPU，短请求被挡。",
         "吞吐 1，排队 3。",
-        "L 开始独占。",
+        "L 开始独占 GPU。",
         "空位锁住。",
         "排队人数不降。",
         "还在等。",
         "还在等。",
         "L 最后一块。",
-        "这才一起吐字。",
-        "座位满了。",
-        "继续吐。",
+        "这才一起开始输出 token。",
+        "批次满了。",
+        "继续输出 token。",
         "S1 结束。"
       ],
       chunk: [
-        "空位在闪，下一步可以补人。",
-        "S1 出字，S2 进来。",
+        "空位在闪，下一步可以补进新请求。",
+        "S1 开始输出 token，S2 进来。",
         "吞吐升，排队降。",
-        "短请求继续吐。",
+        "短请求继续输出 token。",
         "L 只切一块。",
         "短请求离开。",
         "L 的尾延迟没被短请求拉长。",
         "只剩 L。",
         "L 再切一块。",
         "L 最后一块。",
-        "L 开始吐。",
-        "L 吐字。",
+        "L 开始输出 token。",
+        "L 输出 token。",
         "短请求 Goodput 已拿到。"
       ]
     };
@@ -618,7 +618,7 @@
 
     function sparkHtml(kind, showT) {
       const cols = axisLen();
-      const unit = kind === "wait" ? "排队" : (kind === "decode" ? "在吐字" : "在算 prompt");
+      const unit = kind === "wait" ? "排队" : (kind === "decode" ? "输出 token" : "在算 prompt");
       let html = "";
       for (let i = 0; i < cols; i++) {
         const st = statsAt(mode, i);
@@ -637,30 +637,35 @@
 
     function renderRefill(idle, showT) {
       const s = sched();
-      const q = [], win = [], done = [];
+      const q = [], win = [], decoding = [], done = [];
       if (!idle) {
         NAMES.forEach(n => {
           const ph = phaseAt(s, n.id, showT);
           if (ph === "W" || ph === "B") q.push(n);
+          else if (ph === "P") win.push({ n, ph });
+          else if (ph === "D") decoding.push({ n, ph });
           else if (ph === "F") done.push(n);
-          else win.push({ n, ph });
         });
       }
-      const holes = Math.max(0, 4 - win.length);
+      // 空位按 GPU 总占用（算 prompt + 输出 token）留；输出中的请求画在右边框
+      const holes = Math.max(0, 4 - win.length - decoding.length);
       const canFill = !idle && mode === "chunk" && q.length > 0 && holes > 0;
       const blocked = !idle && !canFill && q.length > 0;
       const fd = firstDecode("S1");
       const hit = !idle && showT >= fd;
       const good = fd <= SLA_FD;
       document.getElementById("refillQ").innerHTML = q.map(n => chipHtml(n, "W")).join("");
-      let seats = win.map(x => {
-        const extra = (hit && x.n.id === "S1" && x.ph === "D") ? " s1-hit" : "";
-        return chipHtml(x.n, x.ph, extra);
-      }).join("");
+      let seats = win.map(x => chipHtml(x.n, x.ph)).join("");
       const holeCls = canFill ? "chip hole open" : "chip hole lock";
       for (let i = 0; i < holes; i++) seats += '<div class="' + holeCls + '"></div>';
       document.getElementById("refillWin").innerHTML = seats;
-      document.getElementById("refillDone").innerHTML = done.map(n => chipHtml(n, "F")).join("");
+      const rightSeats =
+        decoding.map(x => {
+          const extra = (hit && x.n.id === "S1") ? " s1-hit" : "";
+          return chipHtml(x.n, "D", extra);
+        }).join("") +
+        done.map(n => chipHtml(n, "F")).join("");
+      document.getElementById("refillDone").innerHTML = rightSeats;
       const arr = document.getElementById("refillArr");
       arr.className = "refill-arr" + (canFill ? " go" : (blocked ? " no" : ""));
       arr.textContent = blocked ? "✕" : "→";
@@ -677,8 +682,8 @@
       document.getElementById("stripFoot").innerHTML =
         '<span class="pill' + (q.length >= 2 ? " warn" : "") + '">等 ' + q.length + "</span>" +
         '<span class="pill">算 ' + stNow.prefill + "</span>" +
-        '<span class="pill">吐 ' + stNow.decode + "</span>" +
-        '<span class="pill' + (canFill ? " hot" : "") + '">' + (canFill ? "补位" : (blocked ? "上锁" : "—")) + "</span>" +
+        '<span class="pill">输出 ' + stNow.decode + "</span>" +
+        '<span class="pill' + (canFill ? " hot" : "") + '">' + (canFill ? "可补进" : (blocked ? "锁住" : "—")) + "</span>" +
         '<span class="pill' + (hit ? " ok" : "") + '">S1 · 第 ' + fd + " 拍</span>" +
         '<span class="pill' + (good ? " ok" : " warn") + '">' + (good ? "Goodput" : "超 SLA") + "</span>";
     }
@@ -740,7 +745,7 @@
         const tag = good ? "第 " + fd + " 拍 · Goodput" : "第 " + fd + " 拍 · 超 SLA";
         return '<div class="cmp-row' + (cur ? " cur" : "") + (hit ? " hit" : "") + '" data-m="' + m.id + '" data-fd="' + fd + '">' +
           '<div class="cmp-lab">' + m.label + "<small>" + m.sub + "</small></div>" +
-          '<div class="cmp-track"><div class="cmp-fill" style="width:' + pct + '%"><span class="cmp-end' + (good ? " ok" : "") + '">' + tag + (hit ? " · 已出字" : "") + '</span></div></div></div>';
+          '<div class="cmp-track"><div class="cmp-fill" style="width:' + pct + '%"><span class="cmp-end' + (good ? " ok" : "") + '">' + tag + (hit ? " · 已出首 token" : "") + '</span></div></div></div>';
       }).join("");
     }
 
