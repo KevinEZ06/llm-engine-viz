@@ -38,6 +38,7 @@
       border-radius: .7rem; padding: .75rem 1rem; margin-bottom: 1.15rem;
       color: #dbeafe; font-size: .88rem; line-height: 1.5;
     }
+    .note a { color: #93c5fd; }
     h2 { margin: 1.35rem 0 .55rem; font-size: .9rem; color: var(--muted); font-weight: 600; }
     .path {
       display: flex; flex-wrap: wrap; gap: .4rem; align-items: stretch;
@@ -91,30 +92,34 @@
   <div class="page">
     <h1>一个请求怎么落地</h1>
     <p class="lead">
-      这是 <a href="https://github.com/datawhalechina/zero-to-sglang">zero-to-sglang</a> 的章节引子：先看动画，再读
-      <a href="https://datawhalechina.github.io/zero-to-sglang/">课程正文</a>。
-      教程现在<strong>只有 Part I 写完</strong>（I.3 / I.5 仍在更新），Part II–IV 几乎还是占位。
+      先看动画，再读
+      <a href="https://datawhalechina.github.io/zero-to-sglang/">zero-to-sglang</a>。
+      教程现在<strong>只有 Part I 写完</strong>（I.3 / I.5 还在改），后面章节大多还没正文。
     </p>
     <div class="note">
-      点路径上的盒子，按 Part I → 已有引擎页往下走。I.2 Roofline、I.3 GPU 还没有动画，请先读正文。原来的首页 Radix 在 <a href="radix.html" style="color:#93c5fd">radix.html</a>。
+      点下面的盒子，打开对应页面。没有动画的章节会标「暂无动画」。
+      以前的首页 Radix 树在 <a href="radix.html">radix.html</a>。
     </div>
 
-    <h2>按教程顺序打开的页</h2>
+    <h2>按章节打开</h2>
     <div class="path" id="path"></div>
     <div class="detail" id="detail"></div>
 
-    <h2>主题 → 本仓库页面</h2>
+    <h2>有哪些页</h2>
     <div class="lessons" id="lessons"></div>
 
     <p class="foot">
-      PD 分离另见 <a href="https://abatom.github.io/inferflux/pd-disagg.html">inferflux</a>，和 <a href="kvpd.html">kvpd.html</a> 同属 <strong>III.5 分卡</strong>，不是第 2 章同卡 Prefill/Decode。
-      zero-to-sglang 章节对照见 <a href="https://github.com/KevinEZ06/llm-engine-viz">README</a>。许可 CC BY-NC-SA 4.0。
+      P 机和 D 机分开的另一画法见
+      <a href="https://abatom.github.io/inferflux/pd-disagg.html">inferflux</a>
+      （和本站 <a href="kvpd.html">kvpd.html</a> 讲同一件事：分卡交接，不是同卡 Prefill/Decode 两阶段）。
+      章节对照表在 <a href="https://github.com/KevinEZ06/llm-engine-viz">README</a>。许可 CC BY-NC-SA 4.0。
     </p>
   </div>
   <script src="nav.js"></script>
   <script>
     const CH = {
       i2: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC2%E7%AB%A0_%E6%8E%A8%E7%90%86%E5%85%A5%E9%97%A8.md",
+      i3: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC3%E7%AB%A0_GPU%E5%85%A5%E9%97%A8.md",
       i4: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC4%E7%AB%A0_%E6%8E%A8%E7%90%86%E7%9A%84%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%85%A5%E9%97%A8.md",
       i5: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC5%E7%AB%A0_Benchmark%E5%85%A5%E9%97%A8.md"
     };
@@ -122,59 +127,59 @@
     const ZTS_STOPS = [
       {
         k: "I.5 指标", s: "Benchmark",
-        cap: "教程图 5.4：排队 + Prefill + 首 Decode = TTFT。吞吐拉高容易，Goodput 要 TTFT 落在 SLA 里。看 P99 不看均值。",
+        cap: "排队 + Prefill + 第一次 Decode = TTFT。吞吐好拉，Goodput 要看首字有没有掉出 SLA。看 P99，别只看均值。",
         href: "batching.html", go: "打开连续批",
         doc: CH.i5, docLab: "读第 5 章"
       },
       {
         k: "I.4 KV", s: "生命周期",
-        cap: "正文先讲为什么要 cache、何时写入/追加、显存公式，再指出 naive 连续分配会碎片、无法共享前缀。本站从分页这一步接上。",
+        cap: "为什么要 cache、什么时候写入/追加、显存怎么估。连着分配会碎、也难共享前缀——分页从这里接上。",
         href: "PagedAttention.html", go: "打开 Paged KV",
         href2: "cacheschedule.html", go2: "Swap / Recompute",
         doc: CH.i4, docLab: "读第 4 章"
       },
       {
         k: "II.8 前缀", s: "Radix",
-        cap: "共享 system prompt 时，树节点加锁、LRU 淘汰。正文仍筹备中。",
+        cap: "大家共用一段 system prompt 时：树节点加锁，用不着的按 LRU 丢掉。",
         href: "radix.html", go: "打开 Radix"
       },
       {
         k: "II.9 / III.4", s: "切分",
-        cap: "QKV 切片、AllReduce、DP Attention、专家 All-to-All。正文仍筹备中。",
+        cap: "一张卡装不下就切开：QKV 切片、AllReduce、专家 All-to-All；超长序列再看 Ring / CP。",
         href: "parallel.html", go: "打开 TP/DP/EP",
         href2: "ring_attention.html", go2: "Ring / CP"
       },
       {
-        k: "II.10 推测", s: "EAGLE-3",
-        cap: "draft → verify → accept。正文仍筹备中。",
-        href: "eagle3.html", go: "打开 EAGLE-3"
+        k: "II.10 推测", s: "EAGLE",
+        cap: "小模型先猜一串候选，大模型一次核对，留下对的前缀。",
+        href: "mtp.html", go: "打开树状推测"
       },
       {
         k: "III.5 分卡", s: "PD 分离",
-        cap: "P 机和 D 机分开，KVPoll 交接。不要和第 2 章「同卡 Prefill / Decode」混成一页。",
+        cap: "Prefill 和 Decode 不在同一台机器上，靠 KVPoll 把 KV 交过去。别跟「同卡先 Prefill 再 Decode」混在一起。",
         href: "kvpd.html", go: "打开 KVPoll",
         href2: "pipeline.html", go2: "路由打分"
       },
       {
         k: "II.2 请求", s: "全链路",
-        cap: "从网关进引擎再吐字。教程这一章还是占位，本页按部署链路先画。",
+        cap: "一条请求从网关进引擎，再到吐字。教程这一章还没写完，这里先按部署路径串一遍。",
         href: "journey.html", go: "打开全链路"
       }
     ];
 
     const ZTS_LESSONS = [
-      { tag: "I.1", ok: false, title: "LLM 入门", why: "Transformer / 自回归。不计划可视化。", links: [], skip: true },
-      { tag: "I.2", ok: false, title: "推理入门", why: "同卡 Prefill vs Decode、compute/memory-bound、Roofline。现有页没有这一层。", links: [["https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC2%E7%AB%A0_%E6%8E%A8%E7%90%86%E5%85%A5%E9%97%A8.md", "读正文"]] },
-      { tag: "I.3", ok: false, title: "GPU 入门", why: "正文已写（SM / 内存层次）。可视化还没有。", links: [["https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC3%E7%AB%A0_GPU%E5%85%A5%E9%97%A8.md", "读正文"]] },
-      { tag: "I.4", ok: true, title: "KV Cache", why: "生命周期与显存公式在正文；本站从 naive 碎片接到分页。", links: [["PagedAttention.html", "Paged KV"], ["cacheschedule.html", "调度"]] },
-      { tag: "I.5", ok: true, title: "Benchmark", why: "TTFT / TPOT / ITL / 吞吐 vs Goodput / 尾延迟。", links: [["batching.html", "连续批"]] },
-      { tag: "II.2", ok: true, title: "Path of a Request", why: "正文占位；部署向全链路可先看。", links: [["journey.html", "journey"]] },
-      { tag: "II.6", ok: true, title: "Continuous Batching", why: "正文筹备中；空窗补位与头阻塞已画。", links: [["batching.html", "连续批"]] },
-      { tag: "II.7", ok: true, title: "Paged KV", why: "逻辑块 ↔ 物理页；Swap / Recompute。", links: [["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
+      { tag: "I.1", ok: false, title: "LLM 入门", why: "Transformer、自回归。不做动画。", links: [], skip: true },
+      { tag: "I.2", ok: false, title: "推理入门", why: "同卡 Prefill / Decode、算力界还是显存界、Roofline。暂无动画。", links: [[CH.i2, "读正文"]] },
+      { tag: "I.3", ok: false, title: "GPU 入门", why: "SM、内存层次。正文有，暂无动画。", links: [[CH.i3, "读正文"]] },
+      { tag: "I.4", ok: true, title: "KV Cache", why: "生命周期与显存；本页从分页和抢占讲起。", links: [["PagedAttention.html", "Paged KV"], ["cacheschedule.html", "调度"]] },
+      { tag: "I.5", ok: true, title: "Benchmark", why: "TTFT / TPOT / ITL、吞吐和 Goodput、尾延迟。", links: [["batching.html", "连续批"]] },
+      { tag: "II.2", ok: true, title: "Path of a Request", why: "从入口到吐字走哪些盒子。", links: [["journey.html", "journey"]] },
+      { tag: "II.6", ok: true, title: "Continuous Batching", why: "空椅补人；短请求别被长 Prefill 堵住。", links: [["batching.html", "连续批"]] },
+      { tag: "II.7", ok: true, title: "Paged KV", why: "逻辑块对物理页；不够就 Swap / Recompute。", links: [["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
       { tag: "II.8", ok: true, title: "RadixAttention", why: "前缀树、加锁、LRU。", links: [["radix.html", "Radix"]] },
-      { tag: "II.9 / III.4", ok: true, title: "TP / DP / EP / CP", why: "正文筹备中。", links: [["parallel.html", "parallel"], ["ring_attention.html", "Ring"]] },
-      { tag: "II.10", ok: true, title: "Speculative Decoding", why: "draft → verify → accept。", links: [["eagle3.html", "eagle3"]] },
-      { tag: "III.5", ok: true, title: "PD Disaggregation", why: "分卡 + KVPoll。不是 I.2。", links: [["kvpd.html", "KVPoll"], ["pipeline.html", "路由"]] }
+      { tag: "II.9 / III.4", ok: true, title: "TP / DP / EP / CP", why: "怎么切、怎么通信。", links: [["parallel.html", "parallel"], ["ring_attention.html", "Ring"]] },
+      { tag: "II.10", ok: true, title: "Speculative Decoding", why: "先猜再核：draft → verify → accept。", links: [["mtp.html", "mtp"]] },
+      { tag: "III.5", ok: true, title: "PD Disaggregation", why: "分卡 + KVPoll。不是 I.2 的同卡两阶段。", links: [["kvpd.html", "KVPoll"], ["pipeline.html", "路由"]] }
     ];
 
     let cur = 0;
@@ -197,8 +202,8 @@
       document.getElementById("lessons").innerHTML = ZTS_LESSONS.map(L => {
         const links = L.links.length
           ? L.links.map(x => '<a href="' + x[0] + '"' + (x[0].indexOf("http") === 0 ? ' target="_blank" rel="noopener"' : "") + ">" + x[1] + "</a>").join("")
-          : "<span class=\"tag wait\">暂缓</span>";
-        const flag = L.skip ? "<span class=\"wait\">不计划</span>" : (L.ok ? "<em>已有</em>" : "<span class=\"wait\">没有</span>");
+          : "<span class=\"tag wait\">暂无动画</span>";
+        const flag = L.skip ? "<span class=\"wait\">不做</span>" : (L.ok ? "<em>有页</em>" : "<span class=\"wait\">暂无动画</span>");
         return '<div class="card' + (L.ok ? "" : " miss") + '"><div class="tag">' + L.tag + " · " + flag + "</div><strong>" + L.title + "</strong><p>" + L.why + '</p><div class="links">' + links + "</div></div>";
       }).join("");
     }
