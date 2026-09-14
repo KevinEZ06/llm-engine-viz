@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Token 全链路 · 从网关到吐字</title>
+  <title>一个 Token 从输入到输出</title>
   <style>
     :root {
       --bg: #0b1220;
@@ -101,13 +101,12 @@
 </head>
 <body>
   <div class="page">
-    <h1>一个 Token 从输入到吐字</h1>
+    <h1>一个 Token 从输入到输出</h1>
     <p class="lead">
-      对应zero-to-sglang II.2 Path of a Request：
-      网关 → K8s → PD worker → tokenizer / Att·MLP 切分 → KV 交接 → 流式返回。
-      本页只建立<strong>路径直觉</strong>；层内 TP/EP/CP 细节见
-      <a href="parallel.html" style="color:#5b9fff">parallel.html</a>，
-      Decode 批处理见 <a href="batching.html" style="color:#5b9fff">batching.html</a>。
+      一条请求怎么走：网关 → K8s → Prefill / Decode → KV 交接 → 输出。
+      本页只串路径，细节进各页（
+      <a href="parallel.html" style="color:#5b9fff">切分</a>、
+      <a href="batching.html" style="color:#5b9fff">连续批</a>）。
     </p>
     <div class="legend">
       <span>蓝 = 控制面</span>
@@ -131,33 +130,33 @@
     <div class="lane">
       <div class="lane-lab">Gateway</div>
       <div class="row">
-        <div class="box c-gw" id="b-proxy"><strong>统一入口</strong><p>只对公网暴露 Proxy</p></div>
-        <div class="box c-gw" id="b-pick"><strong>选 P + 选 D</strong><p>按负载 / cache 亲和</p></div>
-        <div class="box c-gw" id="b-orch"><strong>PD 编排</strong><p>先 P 再 D，再回写 usage</p></div>
+        <div class="box c-gw" id="b-proxy"><strong>统一入口</strong><p>只暴露这一层</p></div>
+        <div class="box c-gw" id="b-pick"><strong>选 P + 选 D</strong><p>看负载和前缀命中</p></div>
+        <div class="box c-gw" id="b-orch"><strong>PD 编排</strong><p>先 P 后 D</p></div>
       </div>
     </div>
     <div class="lane">
       <div class="lane-lab">K8s</div>
       <div class="row">
-        <div class="box c-k8s" id="b-svc-p"><strong>Service/prefill</strong><p>ClusterIP，不对公网</p></div>
+        <div class="box c-k8s" id="b-svc-p"><strong>Service/prefill</strong><p>内网</p></div>
         <div class="box c-k8s" id="b-svc-d"><strong>Service/decode</strong><p>ClusterIP</p></div>
-        <div class="box c-k8s" id="b-dns"><strong>DNS / Endpoints</strong><p>扩缩后 Proxy 再发现</p></div>
+        <div class="box c-k8s" id="b-dns"><strong>DNS / Endpoints</strong><p>扩缩后重新发现</p></div>
       </div>
     </div>
     <div class="lane">
       <div class="lane-lab">Prefill</div>
       <div class="row">
         <div class="box c-p" id="b-tok"><strong>Tokenizer</strong><p>prompt → token ids</p></div>
-        <div class="box c-p" id="b-chunk"><strong>Chunked Prefill</strong><p>算力墙，可切块</p></div>
-        <div class="box c-p" id="b-att"><strong>Att / Dense / Shared</strong><p>走 TP（密通信）</p></div>
-        <div class="box c-p" id="b-moe"><strong>Routed MoE</strong><p>走 EP All-to-All</p></div>
-        <div class="box c-p" id="b-tx"><strong>KV Producer</strong><p>写出压缩 KV</p></div>
+        <div class="box c-p" id="b-chunk"><strong>Chunked Prefill</strong><p>太长就切块算</p></div>
+        <div class="box c-p" id="b-att"><strong>Att / Dense / Shared</strong><p>走 TP</p></div>
+        <div class="box c-p" id="b-moe"><strong>Routed MoE</strong><p>走 EP</p></div>
+        <div class="box c-p" id="b-tx"><strong>KV Producer</strong><p>写出 KV</p></div>
       </div>
     </div>
     <div class="lane">
       <div class="lane-lab">Handoff</div>
       <div class="row">
-        <div class="box c-kv" id="b-kv"><strong>Mooncake / RDMA</strong><p>请求级大对象，不是每字搬权重</p></div>
+        <div class="box c-kv" id="b-kv"><strong>Mooncake / RDMA</strong><p>搬这条请求的 KV</p></div>
       </div>
     </div>
     <div class="lane">
@@ -165,15 +164,15 @@
       <div class="row">
         <div class="box c-d" id="b-boot"><strong>预留显存</strong><p>KVPoll Waiting</p></div>
         <div class="box c-d" id="b-rx"><strong>KV Consumer</strong><p>Transferring → Success</p></div>
-        <div class="box c-d" id="b-cb"><strong>Continuous Batch</strong><p>与其他请求同 step</p></div>
-        <div class="box c-d" id="b-mtp"><strong>MTP / EAGLE</strong><p>草稿 → 验证 → 接受</p></div>
+        <div class="box c-d" id="b-cb"><strong>Continuous Batch</strong><p>和其他请求一批算</p></div>
+        <div class="box c-d" id="b-mtp"><strong>推测解码</strong><p>先猜再核</p></div>
       </div>
     </div>
     <div class="lane">
       <div class="lane-lab">Return</div>
       <div class="row">
-        <div class="box c-out" id="b-sse"><strong>流式 token</strong><p>Proxy 聚合 SSE</p></div>
-        <div class="box c-out" id="b-usage"><strong>usage 修正</strong><p>cached_tokens 回写</p></div>
+        <div class="box c-out" id="b-sse"><strong>流式 token</strong><p>经 Proxy 流式回</p></div>
+        <div class="box c-out" id="b-usage"><strong>usage</strong><p>补上 cache 计数</p></div>
       </div>
     </div>
 
@@ -183,26 +182,26 @@
     </div>
 
     <p class="links">
-      同链路分镜：
-      <a href="kvpd.html">kvpd.html</a> KVPoll 五色 ·
-      <a href="pipeline.html">pipeline.html</a> Router 打分 ·
-      <a href="k8s.html">k8s.html</a> 全局 KV ·
-      <a href="eagle3.html">eagle3.html</a> 推测解码 ·
-      <a href="batching.html">batching.html</a> 调度器视角。
+      细节页：
+      <a href="kvpd.html">PD / KVPoll</a> ·
+      <a href="pipeline.html">路由</a> ·
+      <a href="k8s.html">K8s</a> ·
+      <a href="mtp.html">推测解码</a> ·
+      <a href="batching.html">连续批</a>
     </p>
   </div>
   <script src="nav.js"></script>
   <script>
     const STEPS = [
-      { ids: [], cap: "待命。点「下一步」发送一条长请求。" },
-      { ids: ["b-client"], cap: "客户端只打 Proxy。不要直连 P/D，否则压测口径和业务入口会分叉。" },
-      { ids: ["b-client","b-proxy","b-pick"], cap: "Proxy 同时选一个 Prefill 实例和一个 Decode 实例。选机看负载（P 看排队 token，D 看 KV / 并发），可叠加前缀亲和。" },
-      { ids: ["b-proxy","b-orch","b-svc-p","b-svc-d","b-dns"], cap: "K8s 只负责发现与生命周期：Service DNS → Pod。引擎语义不变，变的是地址从固定 IP 变成 Endpoints。" },
-      { ids: ["b-tok","b-chunk"], cap: "Prefill Pod 内先分词。超长 prompt 走 chunked prefill：一块一块算，避免一次占满调度槽。", inner: "tok" },
-      { ids: ["b-chunk","b-att","b-moe"], cap: "同一层里路径分叉：Attention / 共享专家走 TP（每层 All-Reduce）；routed 专家走 EP（两次 All-to-All）。超长 KV 才叠 CP。", inner: "layer" },
-      { ids: ["b-tx","b-kv","b-boot"], cap: "P 作为 kv_producer 写出 KV；D 早已预留显存（灰灯 Waiting）。搬的是这份请求的 KV，不是每一步把专家权重从 P 寄到 D。" },
-      { ids: ["b-kv","b-rx","b-cb"], cap: "KV 到齐 → Success → 首 token（TTFT）。之后 D 把请求丢进 Continuous Batching，和别的 decode 同一次 forward。" },
-      { ids: ["b-cb","b-mtp","b-sse","b-usage"], cap: "可选 MTP / EAGLE 在 Decode 侧投机出字。Proxy 聚合 SSE，并用 Prefill 的 cached_tokens 修正 usage 后回客户端。" }
+      { ids: [], cap: "待命。点「下一步」。" },
+      { ids: ["b-client"], cap: "客户端只打 Proxy，别直连 P/D。" },
+      { ids: ["b-client","b-proxy","b-pick"], cap: "Proxy 同时选一台 P 和一台 D：看排队、显存，也可看前缀命中。" },
+      { ids: ["b-proxy","b-orch","b-svc-p","b-svc-d","b-dns"], cap: "K8s 只管发现和生命周期。引擎还是那套，只是地址变成 Service / Endpoints。" },
+      { ids: ["b-tok","b-chunk"], cap: "Prefill 先分词。太长就一块一块算，别一次占满。", inner: "tok" },
+      { ids: ["b-chunk","b-att","b-moe"], cap: "一层里：Attention / 共享专家走 TP；routed 专家走 EP。序列特别长再加 CP。", inner: "layer" },
+      { ids: ["b-tx","b-kv","b-boot"], cap: "P 写出这条请求的 KV；D 先留好显存等着。搬的是 KV，不是专家权重。" },
+      { ids: ["b-kv","b-rx","b-cb"], cap: "KV 到齐后出第一个字（TTFT）。然后进连续批，和其他 Decode 一起算。" },
+      { ids: ["b-cb","b-mtp","b-sse","b-usage"], cap: "Decode 侧可先猜再核。Proxy 把流拼回去，usage 里补上 cache 命中。" }
     ];
 
     const INNER = {
@@ -211,7 +210,7 @@
         chips: ["HTTP handler", "Tokenizer", "Prefix cache 查找", "Chunked forward"]
       },
       layer: {
-        title: "一层里的两条路（开启 EP 时）",
+        title: "一层里的两条路（开了 EP）",
         chips: ["QKV / O / Shared · TP All-Reduce", "Router 选 top-k 专家", "All-to-All 寄出", "Expert FFN", "All-to-All 寄回", "残差 + 下一层"]
       }
     };
