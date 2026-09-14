@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ring Attention · CP 传递与按 Head 汇聚</title>
+  <title>Ring Attention · CP + TP</title>
   <style>
     :root {
       --bg: #0b1220;
@@ -113,6 +113,7 @@
 
     .legend { display: flex; flex-wrap: wrap; gap: .55rem 1rem; font-size: .78rem; color: var(--muted); margin-bottom: .45rem; }
     .legend.roles { margin-bottom: .75rem; }
+    .legend-foot { margin-top: .85rem; padding-top: .75rem; border-top: 1px solid var(--border); }
     .dot { width: .65rem; height: .65rem; border-radius: .15rem; display: inline-block; margin-right: .3rem; vertical-align: middle; }
     .kv-0 { background: linear-gradient(180deg,#10b981,#0d9488); }
     .kv-1 { background: linear-gradient(180deg,#a855f7,#c026d3); }
@@ -126,7 +127,7 @@
 
     .sim-split {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
       gap: 1.1rem;
       align-items: stretch;
     }
@@ -140,9 +141,13 @@
       background: #0f1a2c;
       border: 1px solid var(--border);
       border-radius: .85rem;
-      padding: .85rem .9rem 1rem;
+      padding: .9rem 1rem 1.05rem;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      box-sizing: border-box;
     }
-    .sim-right h2 { margin: 0 0 .35rem; font-size: 1rem; }
+    .sim-right h2 { margin: 0 0 .45rem; font-size: 1.1rem; }
     .matrix-formula {
       font-family: ui-monospace, monospace;
       font-size: .72rem;
@@ -162,34 +167,46 @@
       margin: 0 0 .75rem;
     }
     .matrix-dyn strong { color: var(--amber); }
-    .mem-block { margin-bottom: .85rem; }
+    .mem-block {
+      flex: 1 1 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      margin-bottom: .7rem;
+    }
+    .mem-block:last-child { margin-bottom: 0; }
     .mem-block .lab {
-      font-size: .72rem; color: var(--muted); margin-bottom: .4rem;
+      font-size: .82rem; color: var(--muted); margin-bottom: .45rem;
       text-transform: uppercase; letter-spacing: .05em;
+      flex: 0 0 auto;
     }
     .logic-grid, .phys-grid {
       display: grid;
-      grid-template-columns: 3.4rem repeat(4, 1fr);
-      gap: 4px;
+      grid-template-columns: 4.4rem repeat(4, minmax(0, 1fr));
+      grid-template-rows: 1.55rem repeat(4, minmax(2.8rem, 1fr));
+      gap: 5px;
       font-family: ui-monospace, monospace;
-      font-size: .68rem;
+      font-size: .82rem;
+      flex: 1 1 auto;
+      min-height: 0;
+      align-content: stretch;
     }
-    .phys-grid { grid-template-columns: 3.4rem repeat(4, 1fr); }
+    .phys-grid { grid-template-columns: 4.4rem repeat(4, minmax(0, 1fr)); }
     .gcell {
       border: 1px solid var(--border);
-      border-radius: .35rem;
-      min-height: 2.35rem;
-      padding: .85rem .15rem .2rem;
+      border-radius: .4rem;
+      min-height: 0;
+      padding: 1rem .2rem .25rem;
       display: flex; align-items: center; justify-content: center;
       background: #0b1220;
       color: #64748b;
       position: relative;
       transition: transform .7s, box-shadow .3s, background .3s, opacity .4s;
     }
-    .gcell.hdr { background: transparent; border: none; color: var(--muted); min-height: 1.4rem; padding: 0; }
+    .gcell.hdr { background: transparent; border: none; color: var(--muted); min-height: 0; padding: 0; font-size: .78rem; }
     .gcell .role {
-      position: absolute; left: 3px; top: 2px;
-      font-size: .52rem; font-weight: 800; letter-spacing: 0; line-height: 1;
+      position: absolute; left: 4px; top: 3px;
+      font-size: .68rem; font-weight: 800; letter-spacing: 0; line-height: 1;
     }
     .gcell.home {
       box-shadow: inset 0 0 0 2px #e8a317;
@@ -215,16 +232,16 @@
     .gcell.arrow-hint::after {
       content: "↻";
       position: absolute; right: 3px; top: 1px;
-      font-size: .65rem; color: var(--amber);
+      font-size: .78rem; color: var(--amber);
     }
     .gcell.slot {
       background: #070b14;
       border: 1px dashed #243044;
       color: #3d4f66;
       padding-top: .2rem;
-      font-size: .62rem;
+      font-size: .76rem;
     }
-    .axis-note { font-size: .72rem; color: var(--muted); margin: .45rem 0 0; line-height: 1.45; }
+    .axis-note { font-size: .8rem; color: var(--muted); margin: .5rem 0 0; line-height: 1.45; }
 
     .ring-stage {
       position: relative; width: 100%; max-width: none; aspect-ratio: 1;
@@ -353,16 +370,15 @@
 </head>
 <body>
   <div class="page">
-    <h1>Ring Attention：CP 序列切分 · KV 环形传递 · 按 Head 汇聚</h1>
+    <h1>Ring Attention</h1>
     <p class="lead">
-      无外部依赖单页。演示 CP 组内「Q 驻留、KV 顺时针传」；并说明与 TP 叠加时，
-      每张卡只拥有自己的 head 切片，环上传的是<strong>本 head 组 × 序列片</strong>的 KV，最终用 LSE 累加得到本 head 的完整输出——不是把所有 head 搬到一张卡。
+      Q 留在本卡，KV 片在 CP 环上顺时针传。每卡只算自己的 head；环上搬的是「本 head × 这一片序列」，不是整份 head。
     </p>
 
     <div class="tabs" id="tabs">
-      <button type="button" class="tab on" data-view="sim">① 环形模拟</button>
-      <button type="button" class="tab" data-view="layout">② TP×CP 布局</button>
-      <button type="button" class="tab" data-view="merge">③ 传递与按 Head 恢复</button>
+      <button type="button" class="tab on" data-view="sim">环形模拟</button>
+      <button type="button" class="tab" data-view="layout">TP × CP</button>
+      <button type="button" class="tab" data-view="merge">怎么传、怎么合</button>
     </div>
 
     <!-- ========== VIEW: SIM ========== -->
@@ -378,40 +394,24 @@
         </div>
         <div class="detail-strip">
           <div class="detail-card">
-            <div class="t">本步传什么</div>
+            <div class="t">传</div>
             <div class="v" id="d-xfer">—</div>
           </div>
           <div class="detail-card">
-            <div class="t">本步算什么</div>
+            <div class="t">算</div>
             <div class="v" id="d-comp">—</div>
           </div>
           <div class="detail-card">
-            <div class="t">Head 侧状态</div>
+            <div class="t">Head</div>
             <div class="v" id="d-head">—</div>
           </div>
-        </div>
-
-        <div class="legend">
-          <span><i class="dot kv-0"></i>KV<sub>0</sub> 序列片0</span>
-          <span><i class="dot kv-1"></i>KV<sub>1</sub></span>
-          <span><i class="dot kv-2"></i>KV<sub>2</sub></span>
-          <span><i class="dot kv-3"></i>KV<sub>3</sub></span>
-          <span>四色只表示「是哪一列数据」，不表示本卡/外来</span>
-        </div>
-        <div class="legend roles">
-          <span class="lg-home"><i></i>金框 = 该卡<strong style="color:#fcd34d">本地对角</strong>（自己先算的那块）</span>
-          <span class="lg-comp"><i></i>白圈「算」= 本步 Q×这块</span>
-          <span class="lg-done"><i></i>淡「✓」= 已计入 LSE</span>
-          <span class="lg-xfer"><i></i>虚线 = 正在传入</span>
-        </div>
-
-        <div class="sim-split">
+        </div><div class="sim-split">
           <div class="sim-left">
             <div class="ring-stage">
               <div class="center" id="center">
                 <div class="done">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
-                  <span class="done-title">环跑完：每卡 Head 输出已全局一致</span>
+                  <span class="done-title">环跑完：每卡自己的 head 已齐</span>
                 </div>
                 <div class="idle">
                   <svg id="cableIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
@@ -440,33 +440,37 @@
           </div>
 
           <div class="sim-right">
-            <h2>TP4 × CP4 显存矩阵轮转</h2>
-            <p class="muted" style="margin:0">
-              上面是<strong>逻辑履历</strong>（算过哪些列、对角永远钉着本地块）；下面是<strong>物理 HBM</strong>（每卡同时只装 1 块 KV，对角金框不会留在显存里）。
-            </p>
-            <div class="matrix-formula">
-              逻辑：金框钉对角 = 「我出生并先算过 KV<sub>g</sub>」；白圈 = 本步 Q×哪一列<br />
-              物理：GPU<sub>g</sub> 的 HBM 槽 = 唯一一块 KV<sub>(g−t) mod 4</sub>，其余列是空槽
-            </div>
-            <p class="matrix-dyn" id="matrixDyn"></p>
+            <h2>逻辑图 vs 显存</h2>
+            <p class="matrix-dyn" id="matrixDyn" hidden></p>
 
             <div class="mem-block">
-              <div class="lab">逻辑张量 · 履历图（金框钉对角 + 已算列留下）</div>
+              <div class="lab">履历</div>
               <div class="logic-grid" id="logicGrid"></div>
-              <p class="axis-note">回答「我算过什么」：对角本地块送走后金框仍在；淡格是已经折进 LSE 的列。</p>
             </div>
 
             <div class="mem-block">
-              <div class="lab">物理 HBM · 每行只有 1 个实心槽（其余为空）</div>
+              <div class="lab">显存</div>
               <div class="phys-grid" id="physGrid"></div>
-              <p class="axis-note">回答「显存里现在是哪块」：本地 KV 出门后对角变空槽，实心色块出现在收到的那一列。</p>
             </div>
           </div>
         </div>
 
         <div class="note">
-          环上传的 KV<sub>j</sub> 已带本卡 TP 切好的 head：体积 ≈ 全量 KV × (1/CP) × (本卡 head 占比)。
-          不会在环上「先 All-Gather 全部 head」。每步本地更新的是 <code>out/LSE</code>（online softmax 累加），最终输出仍属于本卡 head 组。
+          环上搬的是切好 head 的序列片；head 不换卡。<code>out</code> 是部分 attention 输出，<code>LSE</code> 是对应分数的 log-sum-exp，合片时做 online softmax。
+        </div>
+
+<div class="legend legend-foot">
+          <span><i class="dot kv-0"></i>KV<sub>0</sub></span>
+          <span><i class="dot kv-1"></i>KV<sub>1</sub></span>
+          <span><i class="dot kv-2"></i>KV<sub>2</sub></span>
+          <span><i class="dot kv-3"></i>KV<sub>3</sub></span>
+          <span>颜色 = 哪一片序列</span>
+        </div>
+        <div class="legend roles">
+          <span class="lg-home"><i></i>金框 = 本地那片</span>
+          <span class="lg-comp"><i></i>白圈 = 在算</span>
+          <span class="lg-done"><i></i>淡 ✓ = 已算过</span>
+          <span class="lg-xfer"><i></i>虚线 = 正在传入</span>
         </div>
       </div>
     </section>
@@ -474,14 +478,13 @@
     <!-- ========== VIEW: LAYOUT ========== -->
     <section id="view-layout" hidden>
       <div class="panel">
-        <h2>TP × CP 所有权格子（逻辑坐标系）</h2>
+        <h2>谁拿着哪片 KV</h2>
         <p class="muted">
-          横轴 = 序列片（CP）；纵轴 = Head 组（TP）。每个 GPU 拥有一整行（自己的 heads）里、当前环步拿到的那一列 KV。
-          Ring Attention 让列在环上转；行（head）不换主人。
+          横轴 = 序列片（CP），纵轴 = head 组（TP）。列在环上转；行不动。
         </p>
         <div class="grid-2">
           <div>
-            <h3>当前 Step 的「谁持有哪块 KV」</h3>
+            <h3>当前谁持有哪块</h3>
             <table class="coord" id="coordTable">
               <thead>
                 <tr>
@@ -494,23 +497,20 @@
             <p class="muted" style="margin-top:.6rem" id="coordHint"></p>
           </div>
           <div>
-            <h3>和 All-Gather KV 的差别</h3>
+            <h3>和 All-Gather 比</h3>
             <div class="flow">
               <div class="box">
-                <strong>Ring（本页）</strong>
-                <p>每步只 P2P 传一块 KV 片；算完再传下一块。可与计算 overlap。</p>
+                <strong>Ring</strong>
+                <p>一次只传一片，算完再传下一片。</p>
               </div>
               <div class="arrow">vs</div>
               <div class="box">
-                <strong>All-Gather KV</strong>
-                <p>一步把所有序列片 KV 凑齐再算。实现简单，长上下文带宽更贵。</p>
+                <strong>All-Gather</strong>
+                <p>先凑齐再算。简单，长上下文更费带宽。</p>
               </div>
             </div>
-            <h3>Decode DCP 变体（对照）</h3>
-            <p class="muted">
-              Decode 时 Q 很短：常 <code>All-Gather Q</code> → 各卡用本地序列片 KV 算 partial →
-              <code>LSE 合并 + Reduce-Scatter</code> 按 head 收回。传的是小 Q / 统计量，不是整环搬大 KV。
-              Prefill 长大 KV 时更常走本页的 Pass-KV 环。
+            <p class="muted" style="margin-top:.75rem">
+              Decode 时 Q 很短，更常传小 Q；Prefill 长大 KV 才常用这种环传。
             </p>
           </div>
         </div>
@@ -520,42 +520,35 @@
     <!-- ========== VIEW: MERGE ========== -->
     <section id="view-merge" hidden>
       <div class="panel">
-        <h2>Cache 怎么传 · 怎么「按 Head 汇聚恢复」</h2>
+        <h2>四步</h2>
         <div class="flow">
           <div class="box">
-            <strong>① 本地存</strong>
-            <p>GPU i 固定持有 Q<sub>i</sub>（本序列片上的 query，且已是本 TP-head 切片）与初始 KV<sub>i</sub>。</p>
+            <strong>① 本地</strong>
+            <p>本卡留下 Q<sub>i</sub> 和自己的 KV<sub>i</sub>。</p>
           </div>
           <div class="arrow">→</div>
           <div class="box">
-            <strong>② 环上传</strong>
-            <p>P2P：把当前 KV 块顺时针交给下一卡。内容 = 该序列片上、<strong>发送方 head 布局下的</strong> K/V（与接收方 head 组对齐的那份切片）。</p>
+            <strong>② 环传</strong>
+            <p>当前 KV 片顺时针传给下一卡。</p>
           </div>
           <div class="arrow">→</div>
           <div class="box">
-            <strong>③ 局部累加</strong>
-            <p>Q<sub>i</sub> × 新来的 KV<sub>j</sub> → 更新 partial attention，维护 running <code>out</code> 与 <code>LSE</code>（对数和）。</p>
+            <strong>③ 累加</strong>
+            <p>用本卡 Q 算新来的片，更新 <code>out / LSE</code>。</p>
           </div>
           <div class="arrow">→</div>
           <div class="box">
-            <strong>④ Head 恢复</strong>
-            <p>环跑完后，GPU i 的 out 已等价于「Q<sub>i</sub> 对全局序列」的结果，但仍只含 <strong>head 组 H<sub>i</sub></strong>。后续 MLP 继续用 TP 语义；无需再 All-Gather 全部 head。</p>
+            <strong>④ 齐了</strong>
+            <p>环跑完 = 本卡 head 看过全序列。</p>
           </div>
         </div>
 
-        <h3>随模拟 Step 变化的「汇聚进度」（示意）</h3>
-        <p class="muted">每张卡见过的 KV 片数 / 4。进度满 = 该卡 head 输出已全局一致。</p>
+        <h3>汇聚进度</h3>
+        <p class="muted">满格 = head 齐了。</p>
         <div class="merge-viz" id="mergeViz"></div>
 
-        <h3>PD 传 KV 时（跨 Prefill→Decode）</h3>
-        <p class="muted">
-          环是 <strong>同一 CP 组内算 attention</strong> 的通信；PD 是 <strong>跨角色搬缓存</strong>。
-          Prefill 各 rank 只发出自己拥有的 (head×token) 页 + 元数据；Decode 按自己的 TP×DCP 做 relayout。
-          「按 head 对齐」= 目的卡必须是该 head 的 TP owner；「按 token 对齐」= 写入正确的 DCP slot。
-        </p>
         <div class="note">
-          一句话：<strong>环上传序列维上的 KV 片；Head 维不换主人。</strong>
-          「汇聚」指用 LSE 把多段序列上的 attention 合成正确数值，不是把别人的 head 权重/KV 汇到本卡。
+          环上传的是<strong>序列片</strong>；<strong>head 不换卡</strong>。靠 LSE 合成数值，不是搬别人的 head。
         </div>
       </div>
     </section>
@@ -568,28 +561,28 @@
   var HEAD_LABELS = ["H0-1", "H2-3", "H4-5", "H6-7"]; // 示意：每卡 2 个 head
 
   var stepDescriptions = [
-    "Step 0 · 初始化：每卡用本地 Qᵢ（本 TP-head）× 本地 KVᵢ（本序列片）算第一块 partial，并记下 LSE。无跨卡传输。",
-    "Step 1 · 第 1 次 P2P：KV 顺时针移一位。每卡用同一 Qᵢ 对新来的 KV 片做 online-softmax 累加（更新 out/LSE）。传的是序列片，不是换 head。",
-    "Step 2 · 第 2 次 P2P：继续环传。计算与传输可 overlap。每卡已见过 3/4 序列片，本 head 组的全局结果逐渐成形。",
-    "Step 3 · 最后一次：每卡已见全部 KV 片。本卡输出 = 本 head 组对全序列的 Attention。Head 维从未换主人——这就是「按 head 恢复」。"
+    "Step 0 · 本地算：Q × 自己的 KV，记下 LSE。还没传。",
+    "Step 1 · KV 顺时针移一位；用同一 Q 和新片累加 out/LSE。传序列片，不换 head。",
+    "Step 2 · 再传一轮。算和传可以重叠。每卡已看过 3/4 片。",
+    "Step 3 · 四片都见过。本卡 head 齐了；head 一直没换卡。"
   ];
   var xferText = [
-    "无传输（仅本地 KVᵢ）",
-    "P2P：KV 顺时针 → 下一 Rank（带本 head 切片的序列块）",
-    "P2P：再移一位；带宽压力在序列片大小，不在 head 全集",
-    "最后一跳完成；之后不再传 KV，只保留本卡 out"
+    "不传（只用本地 KV）",
+    "KV 顺时针给下一卡",
+    "再移一位",
+    "传完；后面只留本卡 out"
   ];
   var compText = [
-    "Qᵢ × KVᵢ → partial₀ + LSE₀",
-    "Qᵢ × KVⱼ → 与历史 LSE 做 online 合并",
-    "继续合并 partial；数值上逼近全局 softmax",
-    "outᵢ 对全序列完备；仍只含 head 组 Hᵢ"
+    "Q × 本地 KV → 第一块",
+    "Q × 新片 → 并进 LSE",
+    "继续合并",
+    "全序列齐了；仍是本卡 head"
   ];
   var headText = [
-    "各卡锁定自己的 TP-head 组，不交换 head 权重",
-    "接收的 KV 已按接收方 head 布局对齐（同 TP 组内切片）",
-    "累加的是「同 head、不同 token 片」的贡献",
-    "Reduce/汇聚完成：输出按 head 留在本卡，供后续 TP MLP"
+    "各卡守自己的 head",
+    "收到的 KV 已按本卡 head 切好",
+    "合的是同 head、不同序列片",
+    "齐了：out 留在本卡"
   ];
 
   function kvId(deviceId, s) { return (deviceId - s + TOTAL) % TOTAL; }
@@ -636,26 +629,26 @@
 
     var homeBar = el("div", "home-bar");
     homeBar.dataset.role = "home";
-    homeBar.innerHTML = '<span>本地块 <span class="k">KV<sub>' + id + '</sub></span></span><span data-role="home-state">本步在算</span>';
+    homeBar.innerHTML = '<span>本地 <span class="k">KV<sub>' + id + '</sub></span></span><span data-role="home-state">在算</span>';
     card.appendChild(homeBar);
 
     var blocks = el("div", "blocks");
     var q = el("div", "block block-q");
-    q.innerHTML = '<span class="cap">驻留 · 本 Head</span><span class="name">Q<sub>' + id + '</sub></span>';
+    q.innerHTML = '<span class="cap">驻留 · 不传</span><span class="name">Q<sub>' + id + '</sub></span>';
     var kv = el("div", "block block-kv kv-0");
     kv.dataset.role = "kv";
-    kv.innerHTML = '<span class="cap">本步在算</span><span class="name">KV<sub>0</sub></span>';
+    kv.innerHTML = '<span class="cap">本地 · 在算</span><span class="name">KV<sub>0</sub></span>';
     blocks.appendChild(q); blocks.appendChild(kv);
     card.appendChild(blocks);
 
     var out = el("div", "block-out");
-    out.innerHTML = '<div class="cap">本 Head 累加输出</div><div class="val partial" data-role="out">out 部分 · 见过 1/4 片</div><div class="lse" data-role="lse">LSE: running</div>';
+    out.innerHTML = '<div class="cap">本 head 输出</div><div class="val partial" data-role="out">已算进 1/4 片</div><div class="lse" data-role="lse">LSE · 1/4</div>';
     card.appendChild(out);
 
     var compute = el("div", "compute");
     compute.innerHTML =
       '<div class="shimmer" data-role="shimmer"></div>' +
-      '<div class="cap" data-role="comp-cap">当前局部计算</div>' +
+      '<div class="cap" data-role="comp-cap">本步</div>' +
       '<div class="eq" data-role="eq"><span>Q<sub>' + id + '</sub></span><span class="op">×</span><span data-role="kv-label">KV<sub>0</sub></span></div>';
     card.appendChild(compute);
     return card;
@@ -682,16 +675,10 @@
       }
       tb.appendChild(tr);
     }
-    document.getElementById("coordHint").textContent =
-      "Step " + step + "：格子内「→Gx」表示序列片当前在哪张 GPU 上。每一行（head 组）永不换行；只在行内换列（序列片）。";
+    document.getElementById("coordHint").textContent = "格子里的 →Gx = 这片序列现在在哪张 GPU。一行（head）不换行，只在行内换列。";
   }
 
-  var matrixDynText = [
-    "Step 0 · 两图暂时重合：对角既是逻辑「本地·算」，也是 HBM 里唯一的那块。还没有跨卡。",
-    "Step 1 · <strong>开始分叉</strong>：上图对角仍金框「本地✓」（履历）；下图对角已空，实心块出现在收到的那一列（物理只留 1 槽）。",
-    "Step 2 · 上图一行会有多格淡色履历；下图永远只有 1 个实心。金框只属于逻辑图。",
-    "Step 3 · 逻辑图整行几乎填满（都算过）；HBM 图仍是每行 1 块——这就是 Ring 省显存的原因。"
-  ];
+  var matrixDynText = ["", "", "", ""];
 
   function hasSeenSeq(gpu, seq, s) {
     for (var t = 0; t <= s; t++) {
@@ -701,11 +688,11 @@
   }
 
   function roleLabel(home, computing, done) {
-    if (home && computing) return "本地·算";
-    if (home && done) return "本地✓";
+    if (home && computing) return "本地 · 算";
+    if (home && done) return "本地 ✓";
     if (home) return "本地";
-    if (computing) return "收到·算";
-    if (done) return "已算✓";
+    if (computing) return "传入 · 算";
+    if (done) return "已算 ✓";
     return "";
   }
 
@@ -723,7 +710,7 @@
     var dyn = document.getElementById("matrixDyn");
     if (!dyn) return;
     dyn.innerHTML = isAnimating
-      ? "流转中 · <strong>上图</strong>金框对角不动（履历）；<strong>下图</strong>实心块滑向空槽，对角若正在出门则变成空。"
+      ? ""
       : matrixDynText[step];
 
     var logic = document.getElementById("logicGrid");
@@ -756,7 +743,7 @@
             outgoing ? "moving arrow-hint" : ""
           ));
         } else {
-          logic.appendChild(el("div", "gcell", "·"));
+          logic.appendChild(el("div", "gcell", "−"));
         }
       }
     }
@@ -777,13 +764,13 @@
 
         if (incoming) {
           ghost = el("div", "gcell incoming");
-          ghost.innerHTML = '<span class="role">空→入</span>←';
+          ghost.innerHTML = '<span class="role">传入</span>←';
           phys.appendChild(ghost);
         } else if (onHbm) {
           var pcell = el("div", "gcell kv-" + seq + " live computing");
           if (home) pcell.classList.add("home");
           if (outgoing) pcell.classList.add("moving", "arrow-hint");
-          pcell.innerHTML = '<span class="role">' + (outgoing ? "送出" : (home ? "HBM·本地" : "HBM·收到")) + "</span>KV<sub>" + seq + "</sub>";
+          pcell.innerHTML = '<span class="role">' + (outgoing ? "送出" : (home ? "HBM · 本地" : "HBM · 传入")) + "</span>KV<sub>" + seq + "</sub>";
           phys.appendChild(pcell);
         } else {
           phys.appendChild(el("div", "gcell slot", "空"));
@@ -801,9 +788,9 @@
       var div = el("div", "merge-card");
       div.innerHTML =
         "<div class='t'>GPU " + i + " · " + HEAD_LABELS[i] + "</div>" +
-        "<div>见过序列片 <b>" + seen + "/4</b></div>" +
+        "<div><b>" + seen + "/4</b></div>" +
         "<div class='bar'><i style='width:" + pct + "%'></i></div>" +
-        "<div>" + (seen >= TOTAL ? "Head 输出完备 ✓" : "LSE 累加中…") + "</div>";
+        "<div>" + (seen >= TOTAL ? "齐了" : "累加中") + "</div>";
       root.appendChild(div);
     }
   }
@@ -849,20 +836,20 @@
       var homeBar = card.querySelector('[data-role="home"]');
       homeBar.className = "home-bar" + (isLocal && !isAnimating ? "" : " used");
       card.querySelector('[data-role="home-state"]').textContent =
-        isAnimating && isLocal ? "正在送出…"
-        : isLocal ? "本步正在算这块"
-        : "已算完 · 块已上环";
+        isAnimating && isLocal ? "送出…"
+        : isLocal ? "在算"
+        : "已送出";
 
       var kvBlock = card.querySelector('[data-role="kv"]');
       kvBlock.className = "block block-kv kv-" + k + (isAnimating ? " flying" : "");
       kvBlock.querySelector(".cap").textContent =
-        isAnimating ? "传出中…"
-        : isLocal ? "本地·本步在算"
-        : "收到·本步在算";
+        isAnimating ? "传出…"
+        : isLocal ? "本地 · 在算"
+        : "传入 · 在算";
       kvBlock.querySelector(".name").innerHTML = "KV<sub>" + k + "</sub>";
 
       card.querySelector('[data-role="shimmer"]').classList.toggle("hide", isAnimating || step >= MAX);
-      card.querySelector('[data-role="comp-cap"]').textContent = isAnimating ? "等待环网…" : "当前局部计算";
+      card.querySelector('[data-role="comp-cap"]').textContent = isAnimating ? "等待…" : "本步";
       var eq = card.querySelector('[data-role="eq"]');
       eq.classList.toggle("dim", isAnimating);
       eq.querySelector('[data-role="kv-label"]').innerHTML = "KV<sub>" + k + "</sub>";
@@ -871,12 +858,12 @@
       var lse = card.querySelector('[data-role="lse"]');
       if (seen >= TOTAL) {
         out.className = "val done";
-        out.textContent = "out 完备 · " + HEAD_LABELS[id] + " 全局一致";
-        lse.textContent = "LSE: final";
+        out.textContent = "输出齐了 · " + HEAD_LABELS[id];
+        lse.textContent = "LSE 齐了";
       } else {
         out.className = "val partial";
-        out.textContent = "out 部分 · 见过 " + seen + "/4 片";
-        lse.textContent = "LSE: running (" + seen + " blocks)";
+        out.textContent = "已算进 " + seen + "/4 片";
+        lse.textContent = "LSE · " + seen + "/4";
       }
     });
 
