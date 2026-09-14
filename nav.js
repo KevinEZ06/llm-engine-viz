@@ -8,7 +8,7 @@
     { href: "radix.html", label: "Radix" },
     { href: "PagedAttention.html", label: "Paged KV" },
     { href: "cacheschedule.html", label: "KV 调度" },
-    { href: "eagle3.html", label: "EAGLE-3" },
+    { href: "mtp.html", label: "推测" },
     { href: "kvpd.html", label: "PD 分离" },
     { href: "pipeline.html", label: "路由" },
     { href: "parallel.html", label: "DP/TP/EP/CP" },
@@ -38,7 +38,7 @@
     a.href = p.href;
     a.textContent = p.label;
     if (p.href === file) a.className = "on";
-    if (file === "eagle_3.html" && p.href === "eagle3.html") a.className = "on";
+    if ((file === "eagle_3.html" || file === "eagle3.html") && p.href === "mtp.html") a.className = "on";
     nav.appendChild(a);
   });
   document.body.insertBefore(nav, document.body.firstChild);
