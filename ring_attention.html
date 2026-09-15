@@ -263,6 +263,34 @@
     .done-title { color: var(--green); font-weight: 700; font-size: 1rem; }
     .flowing { color: var(--amber); font-weight: 700; animation: pulse 1s ease-in-out infinite; }
 
+    /* batching .scan 同款紫框：环跑完后框「逻辑图 / 显存」每一行 head */
+    .logic-grid, .phys-grid { position: relative; }
+    .head-row-frame {
+      position: absolute; pointer-events: none; z-index: 8;
+      border-radius: 1.15rem; opacity: 0;
+      background: linear-gradient(180deg, rgba(139,92,246,.08), rgba(139,92,246,.28), rgba(139,92,246,.08));
+      border: 2px solid rgba(196,181,253,.9);
+      box-shadow: 0 0 22px rgba(139,92,246,.55), inset 0 0 16px rgba(167,139,250,.18);
+      transition: opacity .25s ease;
+    }
+    .head-row-frame.on {
+      opacity: 1;
+      animation: head-row-glow 1.8s ease-in-out infinite;
+    }
+    .head-row-frame-lab {
+      position: absolute; left: 50%; top: .2rem; transform: translateX(-50%);
+      font-size: .55rem; font-weight: 800; letter-spacing: .02em;
+      color: #ede9fe; background: #4c1d95; border: 1px solid #c4b5fd;
+      border-radius: 999px; padding: .1rem .4rem; white-space: nowrap;
+      box-shadow: 0 0 8px rgba(139,92,246,.45);
+      max-width: calc(100% - .5rem);
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    @keyframes head-row-glow {
+      0%, 100% { box-shadow: 0 0 14px rgba(139,92,246,.4), inset 0 0 12px rgba(167,139,250,.12); }
+      50% { box-shadow: 0 0 28px rgba(139,92,246,.8), inset 0 0 18px rgba(196,181,253,.22); }
+    }
+
     .nodes { position: absolute; inset: 0; z-index: 10; }
     .node-slot { position: absolute; width: 40%; height: 38%; }
     .d0 { top: 6%; left: 6%; } .d1 { top: 6%; right: 6%; }
@@ -411,7 +439,7 @@
               <div class="center" id="center">
                 <div class="done">
                   <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#3ecf8e" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
-                  <span class="done-title">环跑完：每卡自己的 head 已齐</span>
+                  <span class="done-title">环跑完：每卡已汇总本 head 全部 KV</span>
                 </div>
                 <div class="idle">
                   <svg id="cableIcon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2">
@@ -444,7 +472,7 @@
             <p class="matrix-dyn" id="matrixDyn" hidden></p>
 
             <div class="mem-block">
-              <div class="lab">履历</div>
+              <div class="lab">逻辑图</div>
               <div class="logic-grid" id="logicGrid"></div>
             </div>
 
@@ -706,6 +734,36 @@
     return n;
   }
 
+
+  function placeHeadFrames(grid) {
+    if (!grid) return;
+    Array.prototype.forEach.call(grid.querySelectorAll(".head-row-frame"), function (n) { n.remove(); });
+    var loopDone = step === MAX && !isAnimating;
+    if (!loopDone) return;
+    var kids = Array.prototype.filter.call(grid.children, function (c) {
+      return !c.classList.contains("head-row-frame");
+    });
+    // 表头 5 格 + 每行 5 格（行标 + 4 列）——只套逻辑图
+    if (kids.length < 5 + TOTAL * 5) return;
+    var gr = grid.getBoundingClientRect();
+    var pad = 5;
+    for (var g = 0; g < TOTAL; g++) {
+      var start = 5 + g * 5;
+      var first = kids[start];
+      var last = kids[start + 4];
+      if (!first || !last) continue;
+      var a = first.getBoundingClientRect();
+      var b = last.getBoundingClientRect();
+      var fr = el("div", "head-row-frame on");
+      fr.innerHTML = '<span class="head-row-frame-lab">G' + g + " · " + HEAD_LABELS[g] + " 全序列 KV 齐了</span>";
+      fr.style.left = (a.left - gr.left - pad) + "px";
+      fr.style.top = (a.top - gr.top - pad) + "px";
+      fr.style.width = (b.right - a.left + pad * 2) + "px";
+      fr.style.height = (Math.max(a.height, b.height) + pad * 2) + "px";
+      grid.appendChild(fr);
+    }
+  }
+
   function renderMatrix() {
     var dyn = document.getElementById("matrixDyn");
     if (!dyn) return;
@@ -777,6 +835,12 @@
         }
       }
     }
+
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        placeHeadFrames(logic);
+      });
+    });
   }
 
   function renderMerge() {
@@ -829,6 +893,7 @@
     });
 
     var seen = seenCount(step);
+    var loopDone = step === MAX && !isAnimating;
     document.querySelectorAll(".device").forEach(function (card) {
       var id = Number(card.dataset.deviceId);
       var k = kvId(id, step);
@@ -843,7 +908,8 @@
       var kvBlock = card.querySelector('[data-role="kv"]');
       kvBlock.className = "block block-kv kv-" + k + (isAnimating ? " flying" : "");
       kvBlock.querySelector(".cap").textContent =
-        isAnimating ? "传出…"
+        loopDone ? "本 head 已汇总全序列"
+        : isAnimating ? "传出…"
         : isLocal ? "本地 · 在算"
         : "传入 · 在算";
       kvBlock.querySelector(".name").innerHTML = "KV<sub>" + k + "</sub>";
