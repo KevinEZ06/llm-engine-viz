@@ -3,21 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>llm-engine-viz · 一个 Token 从输入到输出</title>
+  <title>llm-engine-viz · SGLang 推理机制可视化</title>
+  <meta name="description" content="用动画讲清 LLM 推理引擎里的机制：RadixAttention、Continuous Batching、PD 分离、推测解码与并行。配合 zero-to-sglang，浏览器即开。" />
+  <meta property="og:title" content="llm-engine-viz · 推理引擎可视化" />
+  <meta property="og:description" content="用动画讲清 LLM 推理引擎里的机制。RadixAttention / Continuous Batching / PD 分离。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://kevinez06.github.io/llm-engine-viz/" />
+  <meta name="twitter:card" content="summary_large_image" />
   <style>
     :root {
-      --bg: #0b1220;
-      --panel: #152033;
-      --border: #2a3a52;
-      --text: #e8eef7;
-      --muted: #8b9bb4;
-      --blue: #5b9fff;
-      --blue-btn: #2f6fed;
-      --amber: #e8a317;
-      --green: #3ecf8e;
-      --red: #f85149;
-      --violet: #bc8cff;
-      --cyan: #22d3ee;
+      --bg: #0b1220; --panel: #152033; --border: #2a3a52;
+      --text: #e8eef7; --muted: #8b9bb4; --blue: #5b9fff;
+      --blue-btn: #2f6fed; --green: #3ecf8e; --cyan: #22d3ee; --amber: #e8a317;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -25,178 +22,139 @@
       font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
       background: var(--bg); color: var(--text);
     }
-    .page { max-width: 72rem; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
-    h1 {
-      margin: 0 0 .35rem; font-size: 1.45rem;
+    .page { max-width: 72rem; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+    .hero { margin-bottom: 1.5rem; }
+    .hero h1 {
+      margin: 0 0 .5rem; font-size: clamp(1.35rem, 3vw, 1.75rem);
       background: linear-gradient(90deg, #5b9fff, #c4b5fd);
       -webkit-background-clip: text; background-clip: text; color: transparent;
     }
-    h2 { margin: 1.35rem 0 .55rem; font-size: .9rem; color: var(--muted); font-weight: 600; }
-    .path {
-      display: flex; flex-wrap: wrap; gap: .4rem; align-items: stretch;
-      margin-bottom: .85rem;
+    .hero .pitch { margin: 0 0 .75rem; font-size: 1rem; line-height: 1.55; color: #dbeafe; max-width: 40rem; }
+    .hero .sub { margin: 0; font-size: .85rem; color: var(--muted); line-height: 1.5; }
+    .hero .sub a { color: var(--blue); }
+    .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+    .btn {
+      display: inline-block; border-radius: .55rem; padding: .45rem .9rem;
+      font-weight: 600; font-size: .85rem; text-decoration: none; color: #fff;
+      background: var(--blue-btn);
     }
-    .node {
-      flex: 1 1 7.2rem; min-width: 7.2rem; max-width: 11rem;
+    .btn.ghost { background: #334155; }
+    h2 { margin: 1.5rem 0 .75rem; font-size: .8rem; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: .75rem; }
+    a.card {
+      display: flex; flex-direction: column; gap: .35rem;
       background: var(--panel); border: 1px solid var(--border);
-      border-radius: .65rem; padding: .55rem .65rem; cursor: pointer;
-      text-align: left; color: inherit; font: inherit;
+      border-radius: .85rem; padding: .9rem 1rem; text-decoration: none; color: inherit;
+      transition: border-color .15s, transform .15s;
     }
-    .node:hover { border-color: #3b6eb5; }
-    .node.on { border-color: var(--cyan); box-shadow: inset 3px 0 0 var(--cyan); background: #12304a; }
-    .node .k { display: block; font-size: .78rem; font-weight: 700; margin-bottom: .15rem; }
-    .node .s { display: block; font-size: .68rem; color: var(--muted); line-height: 1.35; }
-    .arrow { color: var(--amber); font-weight: 700; align-self: center; font-size: .9rem; }
-    .detail {
-      background: var(--panel); border: 1px solid var(--border);
-      border-radius: .85rem; padding: .9rem 1rem; min-height: 5.6rem; margin-bottom: 1.2rem;
-    }
-    .detail .lbl { color: var(--cyan); font-weight: 700; margin-right: .35rem; }
-    .detail p { margin: .2rem 0 .65rem; line-height: 1.55; color: #dbeafe; font-size: .92rem; }
-    .go {
-      display: inline-block; border: none; border-radius: .55rem;
-      padding: .4rem .8rem; font-weight: 600; cursor: pointer; color: #fff;
-      background: var(--blue-btn); text-decoration: none; font-size: .85rem;
-    }
-    .go.alt { background: #334155; margin-left: .4rem; }
-    .lessons { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: .65rem; }
-    .card {
-      background: var(--panel); border: 1px solid var(--border);
-      border-radius: .75rem; padding: .75rem .85rem; display: flex; flex-direction: column; gap: .35rem;
-    }
-    .card.miss { opacity: .62; }
-    .card .tag { font-size: .68rem; color: var(--muted); letter-spacing: .04em; }
-    .card .tag em { font-style: normal; color: var(--green); }
-    .card .tag .wait { color: var(--amber); }
-    .card strong { font-size: .88rem; }
-    .card p { margin: 0; font-size: .75rem; color: var(--muted); line-height: 1.45; flex: 1; }
-    .card .links { margin-top: .25rem; display: flex; flex-wrap: wrap; gap: .35rem; }
-    .card a {
-      font-size: .72rem; color: var(--blue); text-decoration: none;
-      border: 1px solid #2a4a72; border-radius: 999px; padding: .15rem .5rem;
-    }
-    .card a:hover { background: #1c3358; }
-    .foot { margin-top: 1.4rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+    a.card:hover { border-color: #3b6eb5; transform: translateY(-2px); }
+    a.card .tag { font-size: .68rem; color: var(--cyan); letter-spacing: .04em; }
+    a.card strong { font-size: .95rem; }
+    a.card p { margin: 0; font-size: .78rem; color: var(--muted); line-height: 1.45; flex: 1; }
+    a.card .go { font-size: .72rem; color: var(--blue); margin-top: .25rem; }
+    .foot { margin-top: 2rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
     .foot a { color: var(--blue); }
   </style>
 </head>
 <body>
   <div class="page">
-    <h1>一个 Token 从输入到输出</h1>
-    <h2>按章节打开</h2>
-    <div class="path" id="path"></div>
-    <div class="detail" id="detail"></div>
+    <header class="hero">
+      <h1>llm-engine-viz</h1>
+      <p class="pitch">用动画讲清 LLM 推理引擎里的机制——RadixAttention、Continuous Batching、PD 分离、推测解码与并行。</p>
+      <p class="sub">配合 <a href="https://github.com/datawhalechina/zero-to-sglang">zero-to-sglang</a>：先看动画，再读正文。浏览器打开即可，无需 GPU。</p>
+      <div class="actions">
+        <a class="btn" href="https://kevinez06.github.io/llm-engine-viz/radix.html">从 RadixAttention 开始</a>
+        <a class="btn ghost" href="https://github.com/KevinEZ06/llm-engine-viz">GitHub</a>
+        <a class="btn ghost" href="https://datawhalechina.github.io/zero-to-sglang/">课程正文</a>
+      </div>
+    </header>
 
-    <h2>有哪些页</h2>
-    <div class="lessons" id="lessons"></div>
+    <h2>缓存与注意力</h2>
+    <div class="grid">
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/radix.html">
+        <span class="tag">II.8 · RadixAttention</span>
+        <strong>前缀树与 LRU</strong>
+        <p>共享 system prompt：命中、分裂、加锁、淘汰。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/PagedAttention.html">
+        <span class="tag">I.4 / II.7 · Paged KV</span>
+        <strong>逻辑块 ↔ 物理页</strong>
+        <p>为什么要分页，块怎么映射到显存页。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/cacheschedule.html">
+        <span class="tag">II.7 · 调度</span>
+        <strong>Swap / Recompute</strong>
+        <p>显存不够时：换出还是重算。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/ring_attention.html">
+        <span class="tag">III.4 · CP</span>
+        <strong>Ring Attention</strong>
+        <p>超长序列按环传递 KV。</p>
+        <span class="go">打开 →</span>
+      </a>
+    </div>
+
+    <h2>批处理与调度</h2>
+    <div class="grid">
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/batching.html">
+        <span class="tag">II.6 · Continuous Batching</span>
+        <strong>静态批 / 连续批 / chunk</strong>
+        <p>短请求的第一个字如何被长 Prefill 堵住。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/mtp.html">
+        <span class="tag">II.10 · Speculative</span>
+        <strong>推测解码</strong>
+        <p>draft → verify → accept。</p>
+        <span class="go">打开 →</span>
+      </a>
+    </div>
+
+    <h2>并行与分离</h2>
+    <div class="grid">
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/parallel.html">
+        <span class="tag">II.9 / III.4</span>
+        <strong>TP / DP / EP</strong>
+        <p>QKV 切片、AllReduce、专家 All-to-All。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/kvpd.html">
+        <span class="tag">III.5 · PD</span>
+        <strong>Prefill / Decode 分离</strong>
+        <p>分机器 + KVPoll 交接；别和同卡两阶段搞混。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/pipeline.html">
+        <span class="tag">III.5 · Router</span>
+        <strong>路由打分</strong>
+        <p>请求怎么挑 Prefill / Decode 实例。</p>
+        <span class="go">打开 →</span>
+      </a>
+    </div>
+
+    <h2>全链路</h2>
+    <div class="grid">
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/journey.html">
+        <span class="tag">II.2 · Path of a Request</span>
+        <strong>一个 Token 从输入到输出</strong>
+        <p>网关 → 引擎 → 并行 → 流式返回。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/k8s.html">
+        <span class="tag">IV · Deploy</span>
+        <strong>K8s + Mooncake</strong>
+        <p>集群侧全局 KV 的直觉图。</p>
+        <span class="go">打开 →</span>
+      </a>
+    </div>
 
     <p class="foot">
-      章节对照表在 <a href="https://github.com/KevinEZ06/llm-engine-viz">README</a>。许可 CC BY-NC-SA 4.0。
+      章节与课程对照见 <a href="https://github.com/KevinEZ06/llm-engine-viz#与-zero-to-sglang-课程映射">README</a>。
+      许可 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>。
     </p>
   </div>
-  <script src="nav.js"></script>
-  <script>
-    const CH = {
-      i2: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC2%E7%AB%A0_%E6%8E%A8%E7%90%86%E5%85%A5%E9%97%A8.md",
-      i3: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC3%E7%AB%A0_GPU%E5%85%A5%E9%97%A8.md",
-      i4: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC4%E7%AB%A0_%E6%8E%A8%E7%90%86%E7%9A%84%E6%A0%B8%E5%BF%83%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E5%85%A5%E9%97%A8.md",
-      i5: "https://github.com/datawhalechina/zero-to-sglang/blob/main/course-material/ch/part1/%E7%AC%AC5%E7%AB%A0_Benchmark%E5%85%A5%E9%97%A8.md"
-    };
-
-    const ZTS_STOPS = [
-      {
-        k: "I.5 指标", s: "Benchmark",
-        cap: "排队 + Prefill + 第一次 Decode = TTFT。吞吐容易做高；Goodput 要看首字是否仍满足 SLA。看 P99，别只看均值。",
-        href: "batching.html", go: "打开连续批",
-        doc: CH.i5, docLab: "读第 5 章"
-      },
-      {
-        k: "I.4 KV", s: "生命周期",
-        cap: "为什么要 cache、何时写入/追加、显存怎么估。连续大块分配易碎片化、也难共享前缀，所以用分页。",
-        href: "PagedAttention.html", go: "打开 Paged KV",
-        href2: "cacheschedule.html", go2: "Swap / Recompute",
-        doc: CH.i4, docLab: "读第 4 章"
-      },
-      {
-        k: "II.8 前缀", s: "Radix",
-        cap: "共用 system prompt 时：共享前缀；不用的缓存按最久没用淘汰。",
-        href: "radix.html", go: "打开 Radix"
-      },
-      {
-        k: "II.9 / III.4", s: "切分",
-        cap: "一张卡装不下就切开：QKV 切片、AllReduce、专家 All-to-All；超长序列再看 Ring / CP。",
-        href: "parallel.html", go: "打开 TP/DP/EP",
-        href2: "ring_attention.html", go2: "Ring / CP"
-      },
-      {
-        k: "II.10 推测", s: "MTP",
-        cap: "小模型先猜一串候选，大模型一次核对，留下对的前缀。",
-        href: "mtp.html", go: "打开树状推测"
-      },
-      {
-        k: "III.5 分卡", s: "PD 分离",
-        cap: "Prefill 和 Decode 不在同一台机器上，靠 KVPoll 把 KV 交过去。别跟「同卡先 Prefill 再 Decode」混在一起。",
-        href: "kvpd.html", go: "打开 KVPoll",
-        href2: "pipeline.html", go2: "路由打分"
-      },
-      {
-        k: "II.2 请求", s: "全链路",
-        cap: "一条请求从网关进引擎，再到输出。",
-        href: "journey.html", go: "打开全链路"
-      }
-    ];
-
-    const ZTS_LESSONS = [
-      { tag: "I.1", ok: false, title: "LLM 入门", why: "Transformer、自回归。", links: [], skip: true },
-      { tag: "I.2", ok: false, title: "推理入门", why: "同卡 Prefill / Decode；是算力不够还是显存带宽不够。", links: [[CH.i2, "读正文"]] },
-      { tag: "I.3", ok: false, title: "GPU 入门", why: "SM、内存层次。", links: [[CH.i3, "读正文"]] },
-      { tag: "I.4", ok: true, title: "KV Cache", why: "生命周期与显存；本页从分页和抢占讲起。", links: [["PagedAttention.html", "Paged KV"], ["cacheschedule.html", "调度"]] },
-      { tag: "I.5", ok: true, title: "Benchmark", why: "TTFT / TPOT / ITL、吞吐和 Goodput、尾延迟。", links: [["batching.html", "连续批"]] },
-      { tag: "II.2", ok: true, title: "Path of a Request", why: "从入口到输出经过哪些环节。", links: [["journey.html", "journey"]] },
-      { tag: "II.6", ok: true, title: "Continuous Batching", why: "batch 有空位就补进新请求；短请求别被长 Prefill 堵住。", links: [["batching.html", "连续批"]] },
-      { tag: "II.7", ok: true, title: "Paged KV", why: "KV 分页存；不够就换出或重算。", links: [["PagedAttention.html", "Paged"], ["cacheschedule.html", "调度"]] },
-      { tag: "II.8", ok: true, title: "RadixAttention", why: "共享前缀；不用的缓存按最久没用淘汰。", links: [["radix.html", "Radix"]] },
-      { tag: "II.9 / III.4", ok: true, title: "TP / DP / EP / CP", why: "怎么切、怎么通信。", links: [["parallel.html", "parallel"], ["ring_attention.html", "Ring"]] },
-      { tag: "II.10", ok: true, title: "Speculative Decoding", why: "先猜再核：draft → verify → accept。", links: [["mtp.html", "mtp"]] },
-      { tag: "III.5", ok: true, title: "PD Disaggregation", why: "Prefill/Decode 分机器；别和同卡两阶段搞混。", links: [["kvpd.html", "KVPoll"], ["pipeline.html", "路由"]] }
-    ];
-
-    let cur = 0;
-
-    function renderPath() {
-      document.getElementById("path").innerHTML = ZTS_STOPS.map((n, i) => {
-        const btn = '<button class="node' + (i === cur ? " on" : "") + '" data-i="' + i + '"><span class="k">' + n.k + "</span><span class=\"s\">" + n.s + "</span></button>";
-        return i ? '<span class="arrow">→</span>' + btn : btn;
-      }).join("");
-    }
-    function renderDetail() {
-      const n = ZTS_STOPS[cur];
-      let html = '<span class="lbl">' + n.k + "</span><p>" + n.cap + "</p>";
-      html += '<a class="go" href="' + n.href + '">' + n.go + "</a>";
-      if (n.href2) html += '<a class="go alt" href="' + n.href2 + '">' + n.go2 + "</a>";
-      if (n.doc) html += '<a class="go alt" href="' + n.doc + '" target="_blank" rel="noopener">' + n.docLab + "</a>";
-      document.getElementById("detail").innerHTML = html;
-    }
-    function renderLessons() {
-      document.getElementById("lessons").innerHTML = ZTS_LESSONS.map(L => {
-        const links = L.links.length
-          ? L.links.map(x => '<a href="' + x[0] + '"' + (x[0].indexOf("http") === 0 ? ' target="_blank" rel="noopener"' : "") + ">" + x[1] + "</a>").join("")
-          : "<span class=\"tag wait\">暂无动画</span>";
-        const flag = L.skip ? "<span class=\"wait\">不做</span>" : (L.ok ? "<em>有页</em>" : "<span class=\"wait\">暂无动画</span>");
-        return '<div class="card' + (L.ok ? "" : " miss") + '"><div class="tag">' + L.tag + " · " + flag + "</div><strong>" + L.title + "</strong><p>" + L.why + '</p><div class="links">' + links + "</div></div>";
-      }).join("");
-    }
-
-    document.getElementById("path").addEventListener("click", e => {
-      const btn = e.target.closest("[data-i]");
-      if (!btn) return;
-      cur = +btn.dataset.i;
-      renderPath();
-      renderDetail();
-    });
-    renderPath();
-    renderDetail();
-    renderLessons();
-  </script>
 </body>
 </html>
