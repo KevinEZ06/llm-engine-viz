@@ -5,15 +5,15 @@
     { href: "index.html", label: "总览" },
     { href: "journey.html", label: "全链路" },
     { href: "batching.html", label: "连续批" },
-    { href: "radix.html", label: "Radix" },
     { href: "PagedAttention.html", label: "Paged KV" },
     { href: "cacheschedule.html", label: "KV 调度" },
+    { href: "radix.html", label: "Radix" },
     { href: "mtp.html", label: "推测" },
+    { href: "parallel.html", label: "并行" },
     { href: "kvpd.html", label: "PD 分离" },
     { href: "pipeline.html", label: "路由" },
-    { href: "parallel.html", label: "DP/TP/EP/CP" },
     { href: "ring_attention.html", label: "Ring/CP" },
-    { href: "k8s.html", label: "K8s" }
+    { href: "k8s.html", label: "部署" }
   ];
 
   var file = (location.pathname.split("/").pop() || "index.html");
