@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>llm-engine-viz · SGLang 推理机制可视化</title>
-  <meta name="description" content="用动画讲清 LLM 推理引擎里的机制：RadixAttention、Continuous Batching、PD 分离、推测解码与并行。配合 zero-to-sglang，浏览器即开。" />
+  <meta name="description" content="用动画看懂 LLM 推理：请求怎么走、批处理、KV 分页、前缀复用、推测解码、并行和 PD 分离。配合 zero-to-sglang，浏览器即可打开。" />
   <meta property="og:title" content="llm-engine-viz · 推理引擎可视化" />
-  <meta property="og:description" content="用动画讲清 LLM 推理引擎里的机制。RadixAttention / Continuous Batching / PD 分离。" />
+  <meta property="og:description" content="一页一个问题：上一版卡在哪，这一页怎么解。" />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://kevinez06.github.io/llm-engine-viz/" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -14,7 +14,7 @@
     :root {
       --bg: #0b1220; --panel: #152033; --border: #2a3a52;
       --text: #e8eef7; --muted: #8b9bb4; --blue: #5b9fff;
-      --blue-btn: #2f6fed; --green: #3ecf8e; --cyan: #22d3ee; --amber: #e8a317;
+      --blue-btn: #2f6fed; --cyan: #22d3ee;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -29,7 +29,7 @@
       background: linear-gradient(90deg, #5b9fff, #c4b5fd);
       -webkit-background-clip: text; background-clip: text; color: transparent;
     }
-    .hero .pitch { margin: 0 0 .75rem; font-size: 1rem; line-height: 1.55; color: #dbeafe; max-width: 40rem; }
+    .hero .pitch { margin: 0 0 .75rem; font-size: 1rem; line-height: 1.55; color: #dbeafe; max-width: 56rem; }
     .hero .sub { margin: 0; font-size: .85rem; color: var(--muted); line-height: 1.5; }
     .hero .sub a { color: var(--blue); }
     .actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
@@ -39,7 +39,11 @@
       background: var(--blue-btn);
     }
     .btn.ghost { background: #334155; }
-    h2 { margin: 1.5rem 0 .75rem; font-size: .8rem; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+    h2 {
+      margin: 1.75rem 0 .4rem; font-size: .95rem; color: var(--text);
+      font-weight: 600; letter-spacing: 0; text-transform: none;
+    }
+    .path-note { margin: 0 0 .75rem; font-size: .8rem; color: var(--muted); line-height: 1.5; max-width: 46rem; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16.5rem, 1fr)); gap: .75rem; }
     a.card {
       display: flex; flex-direction: column; gap: .35rem;
@@ -48,12 +52,25 @@
       transition: border-color .15s, transform .15s;
     }
     a.card:hover { border-color: #3b6eb5; transform: translateY(-2px); }
-    a.card .tag { font-size: .68rem; color: var(--cyan); letter-spacing: .04em; }
+    a.card .tag { font-size: .68rem; color: var(--cyan); letter-spacing: .02em; }
     a.card strong { font-size: .95rem; }
-    a.card p { margin: 0; font-size: .78rem; color: var(--muted); line-height: 1.45; flex: 1; }
+    a.card p { margin: 0; font-size: .78rem; color: var(--muted); line-height: 1.5; flex: 1; }
     a.card .go { font-size: .72rem; color: var(--blue); margin-top: .25rem; }
+    details.course {
+      margin-top: 1.75rem; border: 1px solid var(--border); border-radius: .85rem;
+      background: var(--panel); padding: .75rem 1rem 1rem;
+    }
+    details.course > summary {
+      cursor: pointer; font-size: .95rem; font-weight: 600; color: var(--text);
+      list-style: none;
+    }
+    details.course > summary::-webkit-details-marker { display: none; }
+    details.course > summary::before { content: "▸ "; color: var(--muted); }
+    details.course[open] > summary::before { content: "▾ "; }
+    details.course .path-note { margin-top: .5rem; }
     .foot { margin-top: 2rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
     .foot a { color: var(--blue); }
+      @media (max-width: 720px) { .hero .pitch { white-space: normal; } }
   </style>
 </head>
 <body>
@@ -61,98 +78,96 @@
     <header class="hero">
       <h1>llm-engine-viz</h1>
       <p class="pitch">用动画讲清 LLM 推理引擎里的机制——RadixAttention、Continuous Batching、PD 分离、推测解码与并行。</p>
-      <p class="sub">配合 <a href="https://github.com/datawhalechina/zero-to-sglang">zero-to-sglang</a>：先看动画，再读正文。浏览器打开即可，无需 GPU。</p>
+      <p class="sub">配合 <a href="https://github.com/datawhalechina/zero-to-sglang">zero-to-sglang</a>：先看动画，再读正文。浏览器打开即可，不用 GPU。</p>
       <div class="actions">
-        <a class="btn" href="https://kevinez06.github.io/llm-engine-viz/radix.html">从 RadixAttention 开始</a>
+        <a class="btn" href="journey.html">从「请求怎么走」开始</a>
         <a class="btn ghost" href="https://github.com/KevinEZ06/llm-engine-viz">GitHub</a>
         <a class="btn ghost" href="https://datawhalechina.github.io/zero-to-sglang/">课程正文</a>
       </div>
     </header>
 
-    <h2>缓存与注意力</h2>
+    <h2 id="part1">一、单机：请求进来之后怎么越跑越快</h2>
     <div class="grid">
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/radix.html">
-        <span class="tag">II.8 · RadixAttention</span>
-        <strong>前缀树与 LRU</strong>
-        <p>共享 system prompt：命中、分裂、加锁、淘汰。</p>
+      <a class="card" href="journey.html">
+        <span class="tag">1 · 全链路</span>
+        <strong>请求怎么走</strong>
+        <p>请求从入口到返回：经过哪些模块，KV 放哪。</p>
         <span class="go">打开 →</span>
       </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/PagedAttention.html">
-        <span class="tag">I.4 / II.7 · Paged KV</span>
-        <strong>逻辑块 ↔ 物理页</strong>
-        <p>为什么要分页，块怎么映射到显存页。</p>
+      <a class="card" href="batching.html">
+        <span class="tag">2 · 连续批</span>
+        <strong>如何平衡长短请求的处理速度</strong>
+        <p>短请求常被长 Prefill 堵住。对比静态批、Continuous Batching、chunk。</p>
         <span class="go">打开 →</span>
       </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/cacheschedule.html">
-        <span class="tag">II.7 · 调度</span>
-        <strong>Swap / Recompute</strong>
-        <p>显存不够时：换出还是重算。</p>
+      <a class="card" href="PagedAttention.html">
+        <span class="tag">3 · Paged KV</span>
+        <strong>如何改进attn减少显存碎片</strong>
+        <p>按最长序列占满显存浪费大。看逻辑块如何映射到物理页。</p>
         <span class="go">打开 →</span>
       </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/ring_attention.html">
-        <span class="tag">III.4 · CP</span>
-        <strong>Ring Attention</strong>
-        <p>超长序列按环传递 KV。</p>
+      <a class="card" href="cacheschedule.html">
+        <span class="tag">4 · KV 调度</span>
+        <strong>如何调度KV优化显存占用</strong>
+        <p>分页后仍可能装不下。对比 Swap 到 CPU，与 Recompute 再算。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="radix.html">
+        <span class="tag">5 · Radix</span>
+        <strong>Prefill如何复用前缀减少重算</strong>
+        <p>前缀相同却重复算。看前缀树如何命中、拆开、淘汰。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="mtp.html">
+        <span class="tag">6 · 推测解码</span>
+        <strong>Decode如何一次猜多token</strong>
+        <p>普通 Decode 一次一个 token。看 draft 先猜再校验，一步收下多个。</p>
         <span class="go">打开 →</span>
       </a>
     </div>
 
-    <h2>批处理与调度</h2>
+    <h2 id="part2">二、机器不够：拆卡、拆 Prefill/Decode、上集群</h2>
     <div class="grid">
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/batching.html">
-        <span class="tag">II.6 · Continuous Batching</span>
-        <strong>静态批 / 连续批 / chunk</strong>
-        <p>短请求的第一个字如何被长 Prefill 堵住。</p>
+      <a class="card" href="parallel.html">
+        <span class="tag">7 · 并行</span>
+        <strong>权重一张卡装不下</strong>
+        <p>权重一张卡装不下时怎么切（TP），以及 DP / EP 各管什么。</p>
         <span class="go">打开 →</span>
       </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/mtp.html">
-        <span class="tag">II.10 · Speculative</span>
-        <strong>推测解码</strong>
-        <p>draft → verify → accept。</p>
+      <a class="card" href="kvpd.html">
+        <span class="tag">8 · PD 分离</span>
+        <strong>Prefill 与 Decode如何高效配合</strong>
+        <p>Prefill 与 Decode 分到不同机器，KV 怎么交接。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="pipeline.html">
+        <span class="tag">9 · 路由</span>
+        <strong>如何调度多组PD改善性能</strong>
+        <p>多组 Prefill / Decode，请求如何动态调度改善整体性能。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="ring_attention.html">
+        <span class="tag">10 · Ring / CP</span>
+        <strong>如何增加上下文能力</strong>
+        <p>上下文单卡放不下时，KV 如何环传、注意力如何分段算。</p>
+        <span class="go">打开 →</span>
+      </a>
+      <a class="card" href="k8s.html">
+        <span class="tag">11 · 部署</span>
+        <strong>集群部署的整体结构</strong>
+        <p>集群里服务怎么布局，Mooncake 全局 KV 怎么接入。</p>
         <span class="go">打开 →</span>
       </a>
     </div>
 
-    <h2>并行与分离</h2>
-    <div class="grid">
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/parallel.html">
-        <span class="tag">II.9 / III.4</span>
-        <strong>TP / DP / EP</strong>
-        <p>QKV 切片、AllReduce、专家 All-to-All。</p>
-        <span class="go">打开 →</span>
-      </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/kvpd.html">
-        <span class="tag">III.5 · PD</span>
-        <strong>Prefill / Decode 分离</strong>
-        <p>分机器 + KVPoll 交接；别和同卡两阶段搞混。</p>
-        <span class="go">打开 →</span>
-      </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/pipeline.html">
-        <span class="tag">III.5 · Router</span>
-        <strong>路由打分</strong>
-        <p>请求怎么挑 Prefill / Decode 实例。</p>
-        <span class="go">打开 →</span>
-      </a>
-    </div>
-
-    <h2>全链路</h2>
-    <div class="grid">
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/journey.html">
-        <span class="tag">II.2 · Path of a Request</span>
-        <strong>一个 Token 从输入到输出</strong>
-        <p>网关 → 引擎 → 并行 → 流式返回。</p>
-        <span class="go">打开 →</span>
-      </a>
-      <a class="card" href="https://kevinez06.github.io/llm-engine-viz/k8s.html">
-        <span class="tag">IV · Deploy</span>
-        <strong>K8s + Mooncake</strong>
-        <p>集群侧全局 KV 的直觉图。</p>
-        <span class="go">打开 →</span>
-      </a>
-    </div>
+    <details class="course">
+      <summary>按课程章节找页面（对照表）</summary>
+      <p class="path-note">主线按上面 1→11 看。若你在跟 zero-to-sglang，可以用 README 里的章节对照跳到对应动画；对照表不当学习顺序。</p>
+      <p class="path-note" style="margin-bottom:0">完整映射见 <a href="https://github.com/KevinEZ06/llm-engine-viz#与-zero-to-sglang-课程映射" style="color:var(--blue)">README · 课程映射</a>。</p>
+    </details>
 
     <p class="foot">
-      章节与课程对照见 <a href="https://github.com/KevinEZ06/llm-engine-viz#与-zero-to-sglang-课程映射">README</a>。
+      建议：先把「一、单机」看完，再进「二、拆开与集群」。
       许可 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>。
     </p>
   </div>
