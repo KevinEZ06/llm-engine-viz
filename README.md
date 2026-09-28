@@ -14,6 +14,7 @@
 |------|--------|
 | [index.html](https://kevinez06.github.io/llm-engine-viz/) | 总路径：串联所有章节内容 |
 | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 一个 Token 从输入到输出的过程：网关 → K8s → P/D → 层内切分 → 流式返回 |
+| [request-flow.html](https://kevinez06.github.io/llm-engine-viz/request-flow.html) | SGLang 采用三进程流水线与 ZMQ 数据与控制同包传输并发推理 |
 | [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) | TP / DP / EP：QKV 切片、AllReduce、All-to-All、DP 组 |
 | [batching.html](https://kevinez06.github.io/llm-engine-viz/batching.html) | 静态批 / 连续批 / chunk：短请求的第一个字被长 Prefill 挡住 |
 | [radix.html](https://kevinez06.github.io/llm-engine-viz/radix.html) | RadixAttention：前缀树、节点加锁、LRU 淘汰 |
