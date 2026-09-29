@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>一次请求在引擎里怎么走 · llm-engine-viz</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #152033;
+      --border: #2a3a52;
+      --text: #e8eef7;
+      --muted: #8b9bb4;
+      --blue: #5b9fff;
+      --amber: #e8a317;
+      --green: #3ecf8e;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; min-height: 100%;
+      font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    .page { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.25rem 3rem; }
+    h1 {
+      margin: 0 0 .35rem; font-size: 1.45rem;
+      background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .lead { margin: 0 0 .85rem; color: var(--muted); font-size: .92rem; line-height: 1.55; max-width: 56rem; }
+    .lead a { color: var(--blue); }
+    .legend {
+      display: flex; flex-wrap: wrap; gap: .75rem;
+      font-size: .75rem; color: var(--muted); margin-bottom: .85rem;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: .35rem; }
+    .swatch { width: 1.4rem; height: 0; border-top: 2.2px solid; display: inline-block; }
+    .swatch.data { border-color: #5b9fff; }
+    .swatch.ctrl { border-color: #e8a317; border-style: solid; border-top-style: dashed; }
+    .stage-dot { width: .7rem; height: .7rem; border-radius: 3px; display: inline-block; border: 1px solid; }
+    .viz-wrap {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: .85rem; padding: .65rem; overflow-x: auto;
+    }
+    .links { margin-top: 1.1rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
+    .links a { color: var(--blue); }
+    .foot { margin-top: .85rem; font-size: .78rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>一次请求在引擎里怎么走</h1>
+    <p class="lead">
+      单机引擎内部：主进程 → Scheduler / Worker → Detokenizer；③⑥⑦ 为一包 ZMQ（payload + 控制）。
+      蓝实线是数据，橙虚线是控制。集群大路径见 <a href="journey.html">全链路</a>。
+    </p>
+    <div class="legend">
+      <span><i class="swatch data"></i> 数据路径</span>
+      <span><i class="swatch ctrl"></i> 控制路径（与数据并行）</span>
+      <span><i class="stage-dot" style="background:#12304a;border-color:#3b6eb5"></i> 主进程</span>
+      <span><i class="stage-dot" style="background:#3a2a12;border-color:#b45309"></i> 调度与 Worker</span>
+      <span><i class="stage-dot" style="background:#123528;border-color:#15803d"></i> Detokenizer</span>
+    </div>
+    <div class="viz-wrap">
+<svg viewBox="0 0 1040 870" width="100%"
+         style="display:block;width:100%;min-width:920px;height:auto;">
+
+      <defs>
+        <marker id="ah-data" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#5b9fff"/>
+        </marker>
+        <marker id="ah-ctrl" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#e8a317"/>
+        </marker>
+      </defs>
+
+      <!-- 路径图例（右上） -->
+      <rect x="720" y="10" width="300" height="52" rx="8"
+            fill="#0f1a2c" stroke="#2a3a52"/>
+      <line x1="736" y1="28" x2="796" y2="28"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <text x="806" y="32" font-size="11" fill="#e8eef7">数据路径 · 模型数据</text>
+      <line x1="736" y1="48" x2="796" y2="48"
+            stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
+      <text x="806" y="52" font-size="11" fill="#e8eef7">控制路径 · 请求状态</text>
+
+      <!-- 回程走廊 -->
+      <rect x="930" y="72" width="96" height="560" rx="10"
+            fill="#12304a" stroke="#3b6eb5" stroke-dasharray="3 3"/>
+      <text x="978" y="96" font-size="11" font-weight="600"
+            fill="#5b9fff" text-anchor="middle">回程走廊</text>
+
+      <!-- Client -->
+      <rect x="14" y="100" width="118" height="68" rx="10"
+            fill="#12304a" stroke="#5b9fff" stroke-width="1.5"/>
+      <text x="73" y="128" font-size="13" font-weight="600"
+            fill="#e8eef7" text-anchor="middle">Client</text>
+      <text x="73" y="148" font-size="10.5"
+            fill="#8b9bb4" text-anchor="middle">curl / SDK</text>
+
+      <!-- 阶段① 主进程 -->
+      <rect x="148" y="72" width="775" height="140" rx="12"
+            fill="#12304a" stroke="#3b6eb5" stroke-dasharray="4 3"/>
+      <text x="185" y="88" font-size="12" font-weight="600" fill="#5b9fff">
+        阶段① 主进程
+      </text>
+
+      <rect x="180" y="108" width="210" height="52" rx="10"
+            fill="#0f1a2c" stroke="#5b9fff" stroke-width="1.5"/>
+      <text x="285" y="130" font-size="12.5" font-weight="600"
+            fill="#e8eef7" text-anchor="middle">HTTP Server / Engine</text>
+      <text x="285" y="148" font-size="10.5"
+            fill="#8b9bb4" text-anchor="middle">/v1/chat/completions</text>
+
+      <rect x="560" y="108" width="230" height="52" rx="10"
+            fill="#0f1a2c" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="675" y="130" font-size="12.5" font-weight="600"
+            fill="#e8eef7" text-anchor="middle">TokenizerManager</text>
+      <text x="675" y="148" font-size="10.5"
+            fill="#8b9bb4" text-anchor="middle">套模板，切成 token · ReqState</text>
+
+      <!-- 阶段② Scheduler & Worker 进程 -->
+      <rect x="148" y="240" width="775" height="260" rx="12"
+            fill="#3a2a12" stroke="#b45309" stroke-dasharray="4 3"/>
+
+      <rect x="610" y="248" width="210" height="22" rx="4"
+            fill="#123528" stroke="#3ecf8e" stroke-width="1"/>
+      <text x="715" y="263" font-size="10" font-weight="600"
+            fill="#3ecf8e" text-anchor="middle">⚡ 支持 PD Disaggregation (PD分离&RDMA)</text>
+
+      <rect x="195" y="280" width="625" height="205" rx="10"
+            fill="#2a1f0e" stroke="#e8a317" stroke-width="1.4"/>
+      <text x="507" y="298" font-size="11" font-weight="600"
+            fill="#e8a317" text-anchor="middle">
+        Decode 循环：未完成则下一轮；结束则释放 KV
+      </text>
+
+      <!-- Scheduler 框体 -->
+      <rect x="215" y="312" width="235" height="155" rx="10"
+            fill="#0f1a2c" stroke="#e8a317" stroke-width="1.5"/>
+      <text x="332" y="334" font-size="12.5" font-weight="700"
+            fill="#e8eef7" text-anchor="middle">Scheduler (调度中心)</text>
+      <line x1="225" y1="342" x2="440" y2="342" stroke="#3a2a12" stroke-width="1"/>
+      
+      <text x="228" y="360" font-size="10" fill="#e8a317" font-weight="600">▪ Continuous Batching</text>
+      <text x="340" y="360" font-size="9.5" fill="#8b9bb4">(Iteration级组包)</text>
+      
+      <text x="228" y="382" font-size="10" fill="#e8a317" font-weight="600">▪ RadixAttention</text>
+      <text x="318" y="382" font-size="9.5" fill="#8b9bb4">(树状前缀共享)</text>
+
+      <text x="228" y="404" font-size="10" fill="#e8a317" font-weight="600">▪ HiCache</text>
+      <text x="278" y="404" font-size="9.5" fill="#8b9bb4">(HBM/DRAM/Disk多级KV)</text>
+
+      <text x="228" y="426" font-size="9.5" fill="#8b9bb4">状态：先 Prefill 再 Decode 调度</text>
+
+      <!-- Worker 框体 -->
+      <rect x="565" y="312" width="245" height="155" rx="10"
+            fill="#0f1a2c" stroke="#5b9fff" stroke-width="1.5"/>
+      <text x="687" y="334" font-size="12.5" font-weight="700"
+            fill="#e8eef7" text-anchor="middle">Worker (TpWorker/Runner)</text>
+      <line x1="575" y1="342" x2="800" y2="342" stroke="#3b6eb5" stroke-width="1"/>
+
+      <text x="578" y="360" font-size="10" fill="#5b9fff" font-weight="600">▪ Attention Backend</text>
+      <text x="682" y="360" font-size="9.5" fill="#8b9bb4">(FlashInfer/Paged...)</text>
+
+      <text x="578" y="382" font-size="10" fill="#5b9fff" font-weight="600">▪ Quantization</text>
+      <text x="655" y="382" font-size="9.5" fill="#8b9bb4">(FP8/INT4 算子与 KV)</text>
+
+      <text x="578" y="404" font-size="10" fill="#5b9fff" font-weight="600">▪ Tensor Parallelism</text>
+      <text x="688" y="404" font-size="9.5" fill="#8b9bb4">(多卡 SPMD 通信)</text>
+
+      <text x="578" y="426" font-size="9.5" fill="#8b9bb4">前向计算 + Sampling 采样</text>
+
+      <!-- ④ 数据：Scheduler → Worker -->
+      <line x1="450" y1="352" x2="563" y2="352"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <rect x="456" y="332" width="102" height="18" rx="4" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
+      <text x="507" y="345" font-size="9" fill="#5b9fff" font-weight="600" text-anchor="middle">④ batch (Chunked Prefill)</text>
+
+      <!-- ⑤ 数据：新 token 回 Scheduler -->
+      <line x1="565" y1="412" x2="452" y2="412"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <rect x="462" y="420" width="92" height="16" rx="3" fill="#12304a"/>
+      <text x="508" y="432" font-size="9.5" fill="#5b9fff" text-anchor="middle">⑤ next_token</text>
+
+      <!-- 阶段③ Detokenizer -->
+      <rect x="148" y="525" width="775" height="95" rx="12"
+            fill="#123528" stroke="#15803d" stroke-dasharray="4 3"/>
+      <text x="162" y="545" font-size="12" font-weight="600" fill="#3ecf8e">
+        阶段③ Detokenizer 进程
+      </text>
+
+      <rect x="565" y="548" width="245" height="52" rx="10"
+            fill="#0f1a2c" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="687" y="570" font-size="12.5" font-weight="600"
+            fill="#e8eef7" text-anchor="middle">DetokenizerManager</text>
+      <text x="687" y="588" font-size="10.5"
+            fill="#8b9bb4" text-anchor="middle">token → 文本片段</text>
+
+      <!-- ① 数据：Client → HTTP -->
+      <line x1="132" y1="120" x2="178" y2="120"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <rect x="135" y="104" width="42" height="15" rx="3" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
+      <text x="156" y="115" font-size="9.5" font-weight="600" fill="#5b9fff" text-anchor="middle">① 文本</text>
+
+      <!-- ⑨ 数据：流式文本回 Client -->
+      <line x1="180" y1="148" x2="134" y2="148"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <rect x="122" y="156" width="72" height="15" rx="3" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
+      <text x="158" y="167" font-size="9" font-weight="600" fill="#5b9fff" text-anchor="middle">⑨ 文本/[DONE]</text>
+
+      <!-- ② 数据：HTTP → Tokenizer -->
+      <line x1="390" y1="128" x2="558" y2="128"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <rect x="438" y="112" width="72" height="16" rx="3" fill="#12304a"/>
+      <text x="474" y="124" font-size="10" fill="#5b9fff" text-anchor="middle">② input_ids</text>
+
+      <!-- ⑧ 控制：更新/唤醒 -->
+      <line x1="560" y1="150" x2="392" y2="150"
+            stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
+      <rect x="410" y="158" width="92" height="16" rx="3" fill="#3a2a12"/>
+      <text x="456" y="170" font-size="10" fill="#e8a317" text-anchor="middle">⑧ 更新/唤醒</text>
+
+      <!-- ③ 并行路径 & 对齐卡片 UserMsg -->
+      <path d="M655 160 L655 217 L318 217 L318 312"
+            fill="none" stroke="#5b9fff" stroke-width="2.2"
+            marker-end="url(#ah-data)"/>
+      <path d="M691 160 L691 230 L354 230 L354 312"
+            fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
+            marker-end="url(#ah-ctrl)"/>
+
+      <!-- 阶段② 短标题：画在③线之后，垫底避开交叉 -->
+      <rect x="156" y="246" width="128" height="20" rx="3" fill="#3a2a12"/>
+      <text x="162" y="260" font-size="12" font-weight="600" fill="#e8a317">
+        阶段② 调度与 Worker
+      </text>
+      
+      <!-- ③ UserMsg 聚合卡片 -->
+      <rect x="410" y="172" width="156" height="80" rx="8"
+            fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
+      <text x="488" y="188" font-size="11" font-weight="700"
+            fill="#e8eef7" text-anchor="middle">③ UserMsg</text>
+      <text x="488" y="201" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
+
+      <rect x="418" y="208" width="140" height="18" rx="4"
+            fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
+      <text x="488" y="221" font-size="9.5" font-weight="600"
+            fill="#5b9fff" text-anchor="middle">payload：input_ids</text>
+
+      <rect x="418" y="230" width="140" height="18" rx="4"
+            fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
+      <text x="488" y="243" font-size="9.5" font-weight="600"
+            fill="#e8a317" text-anchor="middle">控制：调度入队 / 参数</text>
+
+      <!-- ⑥ 并行路径 & 对齐卡片 DetokenizeMsg -->
+      <path d="M318 467 L318 560 L563 560"
+            fill="none" stroke="#5b9fff" stroke-width="2.2"
+            marker-end="url(#ah-data)"/>
+      <path d="M354 467 L354 585 L563 585"
+            fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
+            marker-end="url(#ah-ctrl)"/>
+
+      <!-- ⑥ DetokenizeMsg 聚合卡片 -->
+      <rect x="370" y="520" width="156" height="80" rx="8"
+            fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
+      <text x="448" y="536" font-size="11" font-weight="700"
+            fill="#e8eef7" text-anchor="middle">⑥ DetokenizeMsg</text>
+      <text x="448" y="549" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
+
+      <rect x="378" y="555" width="140" height="18" rx="4"
+            fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
+      <text x="448" y="568" font-size="9.5" font-weight="600"
+            fill="#5b9fff" text-anchor="middle">payload：token_ids</text>
+
+      <rect x="378" y="577" width="140" height="18" rx="4"
+            fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
+      <text x="448" y="590" font-size="9.5" font-weight="600"
+            fill="#e8a317" text-anchor="middle">控制：触发解码 / 请求标识</text>
+
+      <!-- ⑦ 并行路径 & 对齐卡片 UserReply -->
+      <path d="M810 560 L952 560 L952 126 L792 126"
+            fill="none" stroke="#5b9fff" stroke-width="2.2"
+            marker-end="url(#ah-data)"/>
+      <path d="M810 585 L988 585 L988 146 L792 146"
+            fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
+            marker-end="url(#ah-ctrl)"/>
+      
+      <!-- ⑦ UserReply 聚合卡片 -->
+      <rect x="882" y="272" width="140" height="138" rx="8"
+            fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
+      <text x="952" y="293" font-size="11" font-weight="700"
+            fill="#e8eef7" text-anchor="middle">⑦ UserReply</text>
+      <text x="952" y="309" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
+
+      <rect x="890" y="318" width="124" height="24" rx="4"
+            fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
+      <text x="952" y="334" font-size="10" font-weight="600"
+            fill="#5b9fff" text-anchor="middle">payload：文本</text>
+
+      <rect x="890" y="348" width="124" height="50" rx="4"
+            fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
+      <text x="952" y="367" font-size="8.8" font-weight="600"
+            fill="#e8a317" text-anchor="middle">控制：请求 ID (Request ID)</text>
+      <text x="952" y="386" font-size="8.8" font-weight="600"
+            fill="#e8a317" text-anchor="middle">   finished 状态标记</text>
+
+      <!-- 取消：控制路径 -->
+      <text x="162" y="198" font-size="10" fill="#e8a317">
+        取消（控制）：断开 → AbortMsg → 停算收回 KV
+      </text>
+
+      <!-- 图例底栏 -->
+      <rect x="148" y="650" width="850" height="195" rx="12"
+            fill="#0f1a2c" stroke="#2a3a52"/>
+      <text x="168" y="674" font-size="12" font-weight="600" fill="#e8eef7">核心机制与图例索引</text>
+
+      <rect x="168" y="688" width="14" height="14" rx="3" fill="#12304a" stroke="#3b6eb5"/>
+      <text x="190" y="699" font-size="11" fill="#8b9bb4">主进程</text>
+      <rect x="280" y="688" width="14" height="14" rx="3" fill="#3a2a12" stroke="#b45309"/>
+      <text x="302" y="699" font-size="11" fill="#8b9bb4">Scheduler</text>
+      <rect x="420" y="688" width="14" height="14" rx="3" fill="#123528" stroke="#15803d"/>
+      <text x="442" y="699" font-size="11" fill="#8b9bb4">Detokenizer</text>
+      <rect x="560" y="688" width="14" height="14" rx="3" fill="#2a1f0e" stroke="#e8a317"/>
+      <text x="582" y="699" font-size="11" fill="#8b9bb4">Decode 循环</text>
+
+      <line x1="168" y1="724" x2="220" y2="724"
+            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+      <text x="230" y="728" font-size="11" fill="#8b9bb4">数据路径：①②③④⑤⑥⑦⑨（连续：文本 → ids → batch → token → 文本）</text>
+
+      <line x1="168" y1="750" x2="220" y2="750"
+            stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
+      <text x="230" y="754" font-size="11" fill="#8b9bb4">控制路径：③⑥⑦⑧ 与 Abort（数据/状态同包：入队、解码、回程、唤醒、取消）</text>
+
+      <text x="168" y="782" font-size="10.5" fill="#5b9fff" font-weight="600">
+        新增关键技术映射：
+      </text>
+      <text x="168" y="802" font-size="10.5" fill="#8b9bb4">
+        • Continuous Batching / RadixAttention / HiCache ➔ 位于阶段② Scheduler 调度引擎中
+      </text>
+      <text x="168" y="822" font-size="10.5" fill="#8b9bb4">
+        • Chunked Prefill ➔ 位于 ④ batch 组包通道 ｜ Worker / Attention Backend / Quantization ➔ 位于 Worker 算子引擎中
+      </text>
+      <text x="168" y="837" font-size="10.5" fill="#3ecf8e" font-weight="600">
+        • PD Disaggregation ➔ 支持将阶段② 拆分为独立的 Prefill 节点与 Decode 节点并经由 RDMA 传输 KV
+      </text>
+    </svg>
+    </div>
+    <p class="links">
+      相关页：
+      <a href="index.html">总览</a> ·
+      <a href="request-flow1.html">基础请求流</a> ·
+      <a href="request-flow2.html">request-flow2</a> ·
+      <a href="journey.html">全链路（集群）</a> ·
+      <a href="parallel.html">并行 TP/DP/EP</a> ·
+      <a href="batching.html">连续批</a>
+    </p>
+    <p class="foot">许可 CC BY-NC-SA 4.0 · 拓扑基于你提供的缩短标题版；可放入 llm-engine-viz 根目录作 request-flow3.html</p>
+  </div>
+</body>
+</html>
