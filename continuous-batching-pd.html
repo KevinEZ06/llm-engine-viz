@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Continuous Batching：统一 vs PD 分离</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --card: #1a2332;
+    --border: #2d3a4f;
+    --text: #e7ecf3;
+    --muted: #9aa8bc;
+    --blue: #5b9fd4;
+    --orange: #e8a87c;
+    --green: #7dcea0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 24px 48px;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+  }
+  h1 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0 0 24px;
+  }
+  .wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--card);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 720px;
+    font-size: 0.92rem;
+  }
+  th, td {
+    padding: 14px 16px;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: #141c28;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: none;
+  }
+  tr:last-child td { border-bottom: none; }
+  th:first-child, td:first-child {
+    white-space: nowrap;
+    color: var(--blue);
+    font-weight: 600;
+    width: 22%;
+  }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .tag-u { background: rgba(91,159,212,0.2); color: var(--blue); }
+  .tag-p { background: rgba(232,168,124,0.2); color: var(--orange); }
+  .note {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .note strong { color: var(--green); }
+</style>
+</head>
+<body>
+  <h1>Continuous Batching：两种部署对比</h1>
+  <p class="sub">一步 = 调度一批请求，做一次 model forward。Continuous batching = 按迭代拼 batch，不强制整请求跑完才换下一批。</p>
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>对比项</th>
+          <th>
+            <span class="tag tag-u">统一引擎</span><br />
+            Prefill + Decode 同机
+          </th>
+          <th>
+            <span class="tag tag-p">PD 分离</span><br />
+            Prefill / Decode 分池
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>一步里谁进 batch</td>
+          <td>可同时含 prefill（常 chunked）与 decode 请求</td>
+          <td>P 侧：多个（chunked）prefill<br />D 侧：多个 decode<br />同一步通常不再 P+D 混批</td>
+        </tr>
+        <tr>
+          <td>Continuous batching 落点</td>
+          <td>单引擎内：混相负载一起拼 batch</td>
+          <td>两边各自 continuous batching</td>
+        </tr>
+        <tr>
+          <td>为什么这样拼</td>
+          <td>Decode 单 token 算力吃不满；掺 prefill 提高 GPU 利用率</td>
+          <td>避免 P/D 互相抢算力与调度；两侧按自身瓶颈优化</td>
+        </tr>
+        <tr>
+          <td>KV Cache 放哪</td>
+          <td><strong>一套</strong>分页 KV 池（PagedAttention），P/D 请求共用</td>
+          <td><strong>两套</strong>池：P 池 + D 池，不是共享同一块内存<br />P 算完写入本地 → RDMA/NIXL 等拷到 D → 之后主要在 D 池增长<br />传完后 P 侧通常释放该请求页，好接下一个 prefill</td>
+        </tr>
+        <tr>
+          <td>一步里 KV 怎么动</td>
+          <td>按请求各自的 block table：<br />Prefill 写新页；Decode 读旧页并追加 1 token</td>
+          <td>P：只写（或 chunk 写）prompt KV 到 P 池<br />传输：把相关 block「搬」到 D 池<br />D：读已传入的 KV，每步追加 1 token</td>
+        </tr>
+        <tr>
+          <td>内存 / 调度约束</td>
+          <td>共享池；空页不够则少接 prefill 或抢占</td>
+          <td>两池内存与并发独立扩缩；还要考虑 KV 传输延迟、bootstrap，以及 P 侧传完释放是否及时</td>
+        </tr>
+        <tr>
+          <td>一句话</td>
+          <td>「一步混着算，KV 分页共一池」</td>
+          <td>「P 拼 P、D 拼 D；两池，算完再搬」</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note"><strong>备注：</strong>Chunked prefill 在两种场景都常见——统一时用来避免长 prefill 堵死 decode；PD 时主要在 P 侧控制单步工作量与 TTFT。PD 的 KV 是「算完再搬」，不是跨机共享显存。</p>
+</body>
+</html>
