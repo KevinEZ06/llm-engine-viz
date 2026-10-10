@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>SIMT 核的三圈近似 · llm-engine-viz</title>
+<title>SIMT 深入浅出 · llm-engine-viz</title>
 <style>
   :root {
     --bg: #0b1220; --panel: #152033; --panel2: #0f1a2c; --border: #2a3a52;
@@ -100,7 +100,7 @@
 </head>
 <body>
 <div class="page">
-  <h1>SIMT 核的三圈近似（one / two / three-loop）</h1>
+  <h1>SIMT 深入浅出（one / two / three-loop）</h1>
   <p class="lead">一圈先看控制流，两圈加入结果依赖，三圈再加入寄存器读取和执行资源的限制。</p>
   <p class="lead">这里的「圈」是书中用来分析 GPU 发射路径的逐层近似，不是所有 GPU 都采用的固定流水线。每增加一圈，模型就多考虑一类会限制发射的条件。</p>
 
