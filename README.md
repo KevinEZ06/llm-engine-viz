@@ -25,6 +25,8 @@
 | [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) | SMG 路由打分 |
 | [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) | K8s + Mooncake 全局 KV |
 | [ring_attention.html](https://kevinez06.github.io/llm-engine-viz/ring_attention.html) | Ring Attention / Context Parallel |
+| [gpu-arch-path.html](https://kevinez06.github.io/llm-engine-viz/gpu-arch-path.html) | GPU介绍：从 SIMT 核到访存层次，每一步回答四个问题 |
+| [simt-loops.html](https://kevinez06.github.io/llm-engine-viz/simt-loops.html) | SIMT 核三圈近似：分叉 / 数据依赖 / 操作数读取，含 if/else 栈演示 |
 
 建议顺序：先看 [总览](https://kevinez06.github.io/llm-engine-viz/)，再按 缓存与注意力 → 连续批与调度 → 推测解码 → 并行与全链路。
 
@@ -42,7 +44,7 @@
 | 2 | Part 0 · 0.2 部署第一个 SGLang 服务 | ✅ | 没有 | — | 实操暂不计划可视化 |
 | 3 | Part I · 第1章 LLM 入门 | ✅ | 没有 | — | Transformer / 暂未补充 |
 | 4 | Part I · 第2章 推理入门 | ✅ | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) · [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | Prefill/Decode 拆分；请求落在哪一层 |
-| 5 | Part I · 第3章 GPU 入门 | 🔄 | 没有 | — | 硬件/执行流程暂未补充 |
+| 5 | Part I · 第3章 GPU 入门 | 🔄 | **部分已有** | [gpu-arch-path.html](https://kevinez06.github.io/llm-engine-viz/gpu-arch-path.html) · [simt-loops.html](https://kevinez06.github.io/llm-engine-viz/simt-loops.html) | 执行模型（warp（线程束）/ SIMT / 分叉 / 延迟隐藏）和访存层次；A100 结构、HBM 数字尚未补充 |
 | 6 | Part I · 第4章 KV Cache | ✅ | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 逻辑块 ↔ 物理页 |
 | 7 | Part I · 第5章 Benchmark | 🔄 | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html)（TTFT 分解）· [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | TTFT / 尾延迟直觉 |
 | 8 | Part II · 1 引擎长什么样 | 📝 | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 分层总览；模块图仍可再画 |
