@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SIMT 核的三圈近似 · llm-engine-viz</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #152033; --panel2: #0f1a2c; --border: #2a3a52;
+    --text: #e8eef7; --muted: #8b9bb4;
+    --blue: #5b9fff; --amber: #e8a317; --green: #3ecf8e; --purple: #c4b5fd;
+    --l1: #bc8cff; --l2: #e8a317; --l3: #2dd4bf;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%;
+    font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    background: var(--bg); color: var(--text); }
+  .page { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.25rem 2.5rem; }
+  h1 { margin: 0 0 .35rem; font-size: 1.45rem;
+    background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { margin: 0 0 .5rem; color: var(--muted); font-size: .92rem; line-height: 1.55; max-width: 64rem; }
+  .lead b { color: var(--text); font-weight: 600; }
+  .tabs { display: flex; gap: .5rem; margin: .9rem 0 .9rem; flex-wrap: wrap; align-items: center; }
+  .tab { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: .55rem;
+    padding: .45rem 1rem; cursor: pointer; font-size: .9rem; font-family: inherit; display: inline-flex; gap: .45rem; align-items: center; }
+  .tab:hover { border-color: #3b6eb5; }
+  .tab .dot { width: .65rem; height: .65rem; border-radius: 50%; display: inline-block; }
+  .tab.active { border-color: var(--purple); background: #1a2540; box-shadow: 0 0 0 1px var(--purple) inset; }
+  .tabs .hint { color: var(--muted); font-size: .78rem; margin-left: .4rem; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1.1rem; align-items: start; }
+  @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+  .viz-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: .85rem; padding: .65rem; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; min-width: 760px; }
+  svg text { font-family: inherit; }
+  .stage rect.box { fill: #12304a; stroke: #3b6eb5; stroke-width: 1.4; }
+  .stage .t { fill: var(--text); font-size: 15px; font-weight: 650; }
+  .stage .e { fill: var(--muted); font-size: 11.5px; }
+  .sub rect { fill: #0f1a2c; stroke: #2a3a52; }
+  .sub text { fill: #cbd5e1; font-size: 11.5px; }
+  .stage.stack rect.box { fill: #261a3d; stroke: #8b5cf6; }
+  .dimmable { transition: opacity .25s; }
+  .dim { opacity: .22; }
+  .fwd { stroke: #5b9fff; stroke-width: 2; fill: none; }
+  .loop { fill: none; stroke-width: 2.6; }
+  .loop.l1 { stroke: var(--l1); } .loop.l2 { stroke: var(--l2); } .loop.l3 { stroke: var(--l3); }
+  .lbl { font-size: 12.5px; font-weight: 600; }
+  .lbl.l1 { fill: var(--l1); } .lbl.l2 { fill: var(--l2); } .lbl.l3 { fill: var(--l3); }
+  .assume { fill: #f3c46b; font-size: 12px; }
+  .assume-bg { fill: #2a1f0e; stroke: #b45309; stroke-dasharray: 4 3; }
+  .loopg { transition: opacity .25s; }
+  .hidden { opacity: 0; pointer-events: none; }
+  .dot-anim { animation: none; }
+
+  .gates { background: var(--panel); border: 1px solid var(--border); border-radius: .85rem; padding: .9rem 1rem; }
+  .gates h2 { margin: 0 0 .7rem; font-size: 1rem; }
+  .gate { display: flex; gap: .6rem; align-items: flex-start; padding: .55rem .6rem; border-radius: .55rem; border: 1px solid var(--border);
+    background: var(--panel2); margin-bottom: .55rem; transition: opacity .25s; }
+  .gate .n { flex: none; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: .82rem; color: #0b1220; }
+  .gate .tx { font-size: .84rem; line-height: 1.5; }
+  .gate .tx small { display: block; color: var(--muted); font-size: .76rem; }
+  .gate.off { opacity: .35; }
+  .gate.off .tx::after { content: "（这一圈先不管）"; color: var(--muted); font-size: .74rem; }
+  .gates .ps { color: var(--muted); font-size: .76rem; line-height: 1.5; margin: .3rem 0 0; }
+
+  .card { margin-top: 1.1rem; background: var(--panel); border: 1px solid var(--border); border-radius: .85rem; padding: 1rem 1.15rem; }
+  .card h2 { margin: 0 0 .75rem; font-size: 1.1rem; display: flex; align-items: center; gap: .5rem; }
+  .grid5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: .7rem; }
+  @media (max-width: 1100px) { .grid5 { grid-template-columns: 1fr; } }
+  .q { background: var(--panel2); border: 1px solid var(--border); border-top: 3px solid; border-radius: .55rem; padding: .55rem .7rem; }
+  .q h3 { margin: 0 0 .35rem; font-size: .82rem; color: var(--muted); font-weight: 600; }
+  .q .body { font-size: .86rem; line-height: 1.6; }
+  .q ul { margin: 0; padding-left: 1.05rem; } .q li { margin: .12rem 0; }
+
+  .demo { margin-top: 1.1rem; background: var(--panel); border: 1px solid var(--border); border-radius: .85rem; padding: 1rem 1.15rem; }
+  .demo h2 { margin: 0 0 .3rem; font-size: 1rem; color: var(--l1); }
+  .demo .lead2 { color: var(--muted); font-size: .82rem; margin: 0 0 .8rem; }
+  .demo-grid { display: grid; grid-template-columns: 15rem minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+  @media (max-width: 1100px) { .demo-grid { grid-template-columns: 1fr; } }
+  pre.code { margin: 0; background: var(--panel2); border: 1px solid var(--border); border-radius: .55rem; padding: .6rem .8rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; line-height: 1.75; }
+  pre.code span { display: block; padding: 0 .35rem; border-radius: .25rem; }
+  pre.code span.cur { background: #261a3d; outline: 1px solid #8b5cf6; }
+  table.stk { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  table.stk th, table.stk td { border: 1px solid var(--border); padding: .35rem .5rem; text-align: left; }
+  table.stk th { color: var(--muted); font-weight: 600; background: var(--panel2); }
+  table.stk tr.tos td { background: #261a3d; }
+  .mask { font-family: ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+  .lanes { display: flex; gap: 4px; margin: .4rem 0 .6rem; }
+  .lane { width: 1.7rem; height: 1.7rem; border-radius: .3rem; display: inline-flex; align-items: center; justify-content: center; font-size: .72rem; border: 1px solid var(--border); color: var(--muted); }
+  .lane.on { background: #2a1f4d; border-color: var(--l1); color: var(--text); }
+  .explain { font-size: .86rem; line-height: 1.6; min-height: 4.5rem; }
+  .ctrl { display: flex; gap: .5rem; margin-top: .6rem; align-items: center; }
+  .ctrl button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: .45rem; padding: .35rem .8rem; cursor: pointer; font-size: .8rem; font-family: inherit; }
+  .ctrl button:hover:not(:disabled) { border-color: var(--purple); }
+  .ctrl button:disabled { opacity: .35; cursor: default; }
+  .ctrl .pg { color: var(--muted); font-size: .78rem; }
+  .foot { margin-top: 1rem; font-size: .76rem; color: var(--muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>SIMT 核的三圈近似（one / two / three-loop）</h1>
+  <p class="lead">一圈先看控制流，两圈加入结果依赖，三圈再加入寄存器读取和执行资源的限制。</p>
+  <p class="lead">这里的「圈」是书中用来分析 GPU 发射路径的逐层近似，不是所有 GPU 都采用的固定流水线。每增加一圈，模型就多考虑一类会限制发射的条件。</p>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" data-loop="1" role="tab"><i class="dot" style="background:var(--l1)"></i>一圈</button>
+    <button class="tab" data-loop="2" role="tab"><i class="dot" style="background:var(--l2)"></i>两圈</button>
+    <button class="tab" data-loop="3" role="tab"><i class="dot" style="background:var(--l3)"></i>三圈</button>
+    <span class="hint">点切换；三圈 = 当前近似加入三类约束</span>
+  </div>
+
+  <div class="layout">
+    <div class="viz-wrap">
+      <svg id="pipe" viewBox="0 44 1140 474" aria-label="SIMT 核流水线与三条反馈回路">
+        <defs>
+          <marker id="aF" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b9fff"/></marker>
+          <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#bc8cff"/></marker>
+          <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e8a317"/></marker>
+          <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2dd4bf"/></marker>
+        </defs>
+
+        <!-- SIMT stack -->
+        <g class="stage stack">
+          <rect class="box" x="20" y="62" width="280" height="76" rx="10"/>
+          <text class="t" x="160" y="88" text-anchor="middle">SIMT 栈（SIMT stack）</text>
+          <text class="e" x="160" y="108" text-anchor="middle">活跃掩码（active mask）</text>
+          <text class="e" x="160" y="125" text-anchor="middle">汇合点 PC（reconvergence PC）</text>
+        </g>
+
+        <!-- Stages -->
+        <g class="stage" id="s-fetch">
+          <rect class="box" x="20" y="230" width="130" height="100" rx="10"/>
+          <text class="t" x="85" y="262" text-anchor="middle">取指</text>
+          <text class="e" x="85" y="281" text-anchor="middle">（Fetch）</text>
+          <text class="e" x="85" y="306" text-anchor="middle">+ 译码</text>
+        </g>
+        <g class="stage dimmable" id="s-ibuf">
+          <rect class="box" x="185" y="230" width="130" height="100" rx="10"/>
+          <text class="t" x="250" y="262" text-anchor="middle">指令缓冲</text>
+          <text class="e" x="250" y="281" text-anchor="middle">（I-buffer）</text>
+          <text class="e" x="250" y="306" text-anchor="middle">每个 warp 几条</text>
+        </g>
+        <g class="stage" id="s-issue">
+          <rect class="box" x="350" y="230" width="170" height="100" rx="10"/>
+          <text class="t" x="435" y="254" text-anchor="middle">发射（Issue）</text>
+          <g class="sub"><rect x="362" y="264" width="146" height="26" rx="5"/><text x="435" y="281" text-anchor="middle">warp 调度器</text></g>
+          <g class="sub dimmable" id="sb"><rect x="362" y="296" width="146" height="26" rx="5"/><text x="435" y="313" text-anchor="middle">记分牌（scoreboard）</text></g>
+        </g>
+        <g class="stage dimmable" id="s-oc">
+          <rect class="box" x="555" y="230" width="190" height="100" rx="10"/>
+          <text class="t" x="650" y="254" text-anchor="middle">操作数收集器</text>
+          <text class="e" x="650" y="271" text-anchor="middle">（Operand Collector）</text>
+          <g class="sub">
+            <rect x="567" y="286" width="38" height="30" rx="4"/><text x="586" y="305" text-anchor="middle">B0</text>
+            <rect x="611" y="286" width="38" height="30" rx="4"/><text x="630" y="305" text-anchor="middle">B1</text>
+            <rect x="655" y="286" width="38" height="30" rx="4"/><text x="674" y="305" text-anchor="middle">B2</text>
+            <rect x="699" y="286" width="38" height="30" rx="4"/><text x="718" y="305" text-anchor="middle">B3</text>
+          </g>
+        </g>
+        <g class="stage" id="s-ex">
+          <rect class="box" x="780" y="230" width="170" height="100" rx="10"/>
+          <text class="t" x="865" y="254" text-anchor="middle">执行单元</text>
+          <g class="sub">
+            <rect x="790" y="270" width="46" height="46" rx="5"/><text x="813" y="298" text-anchor="middle">ALU</text>
+            <rect x="842" y="270" width="46" height="46" rx="5"/><text x="865" y="298" text-anchor="middle">LD/ST</text>
+            <rect x="894" y="270" width="46" height="46" rx="5"/><text x="917" y="298" text-anchor="middle">SFU</text>
+          </g>
+        </g>
+        <g class="stage" id="s-wb">
+          <rect class="box" x="985" y="230" width="135" height="100" rx="10"/>
+          <text class="t" x="1052" y="262" text-anchor="middle">写回</text>
+          <text class="e" x="1052" y="281" text-anchor="middle">（Writeback）</text>
+          <text class="e" x="1052" y="306" text-anchor="middle">结果进寄存器</text>
+        </g>
+
+        <!-- forward arrows -->
+        <path class="fwd" d="M150 280 H183" marker-end="url(#aF)"/>
+        <path class="fwd" d="M315 280 H348" marker-end="url(#aF)"/>
+        <path class="fwd" d="M520 280 H553" marker-end="url(#aF)"/>
+        <path class="fwd" d="M745 280 H778" marker-end="url(#aF)"/>
+        <path class="fwd" d="M950 280 H983" marker-end="url(#aF)"/>
+
+        <!-- Loop 1 -->
+        <g class="loopg" id="g1">
+          <path class="loop l1" d="M865 228 V100 H302" marker-end="url(#a1)"/>
+          <text class="lbl l1" x="590" y="88" text-anchor="middle">① 分支结果回到 SIMT 栈：走哪条路（分叉 / 汇合）</text>
+          <path class="loop l1" d="M85 140 V228" marker-end="url(#a1)"/>
+          <text class="lbl l1" x="96" y="182">下一条 PC</text>
+          <text class="lbl l1" x="96" y="199">+ 有效线程</text>
+        </g>
+
+        <!-- Loop 2 -->
+        <g class="loopg" id="g2">
+          <path class="loop l2" d="M1052 332 V440 H435 V333" marker-end="url(#a2)"/>
+          <text class="lbl l2" x="744" y="462" text-anchor="middle">② 写回 → 记分牌放行：等不等结果（数据依赖）</text>
+        </g>
+
+        <!-- Loop 3 -->
+        <g class="loopg" id="g3">
+          <path class="loop l3" d="M650 332 V392 H480 V333" marker-end="url(#a3)"/>
+          <text class="lbl l3" x="565" y="358" text-anchor="middle">收集器已满</text>
+          <text class="lbl l3" x="565" y="375" text-anchor="middle">→ 暂停发射</text>
+          <path class="loop l3" d="M840 332 V392 H710 V333" marker-end="url(#a3)"/>
+          <text class="lbl l3" x="775" y="358" text-anchor="middle">执行单元繁忙</text>
+          <text class="lbl l3" x="775" y="375" text-anchor="middle">→ 等待资源</text>
+          <text class="lbl l3" x="650" y="214" text-anchor="middle" id="l3top">③ 读取与执行资源：凑齐操作数才放行</text>
+        </g>
+
+        <!-- Assumption notes -->
+        <g id="note1" class="loopg">
+          <rect class="assume-bg" x="432" y="168" width="236" height="34" rx="6"/>
+          <text class="assume" x="550" y="190" text-anchor="middle">当前近似暂不展开结果依赖和写回延迟</text>
+        </g>
+        <g id="note2" class="loopg">
+          <rect class="assume-bg" x="520" y="168" width="260" height="34" rx="6"/>
+          <text class="assume" x="650" y="190" text-anchor="middle">当前近似暂不展开寄存器读取约束</text>
+        </g>
+
+        <!-- legend -->
+        <g transform="translate(20,500)">
+          <line x1="0" y1="-4" x2="26" y2="-4" stroke="#5b9fff" stroke-width="2"/><text x="32" y="0" fill="#8b9bb4" font-size="12">指令往前走</text>
+          <line x1="120" y1="-4" x2="146" y2="-4" stroke="#bc8cff" stroke-width="2.6"/><text x="152" y="0" fill="#8b9bb4" font-size="12">一圈：控制流</text>
+          <line x1="260" y1="-4" x2="286" y2="-4" stroke="#e8a317" stroke-width="2.6"/><text x="292" y="0" fill="#8b9bb4" font-size="12">两圈：数据依赖</text>
+          <line x1="412" y1="-4" x2="438" y2="-4" stroke="#2dd4bf" stroke-width="2.6"/><text x="444" y="0" fill="#8b9bb4" font-size="12">三圈：读取竞争 / 结构资源约束</text>
+        </g>
+      </svg>
+    </div>
+
+    <aside class="gates">
+      <h2>一个 warp 能否发射，要满足三类条件</h2>
+      <div class="gate" id="gate1"><span class="n" style="background:var(--l1)">①</span><div class="tx">SIMT 状态给出 PC + 有效线程<small>确定取哪条指令，以及哪些线程参与执行</small></div></div>
+      <div class="gate" id="gate2"><span class="n" style="background:var(--l2)">②</span><div class="tx">记分牌确认依赖已满足<small>源寄存器没有等待中的写回结果</small></div></div>
+      <div class="gate" id="gate3"><span class="n" style="background:var(--l3)">③</span><div class="tx">读取和执行资源可用<small>操作数收集器、寄存器 bank 和对应执行单元能够接收请求</small></div></div>
+      <p class="ps">满足这些条件后，warp 调度器才可能在当前周期选择它。某个 warp 暂时不能发射时，调度器可以选择其他就绪 warp 来隐藏延迟。</p>
+    </aside>
+  </div>
+
+  <section class="card" id="card"></section>
+
+  <section class="demo">
+    <h2>小例子：一个 warp 碰到 if / else（SIMT 栈怎么压、怎么弹）</h2>
+    <p class="lead2">用 8 个线程演示一个 warp（NVIDIA 的 warp 固定 32 个线程）：线程 0–3 执行 if，4–7 执行 else，在 D 处重新汇合。栈表项 =〈汇合点 PC，下一条 PC，活跃掩码〉。</p>
+    <div class="demo-grid">
+      <pre class="code" id="code"><span data-pc="A">A: x = load(...)
+   if (tid &lt; 4)</span><span data-pc="B">B:   y = f(x)    // if</span><span data-pc="C">C:   y = g(x)    // else</span><span data-pc="D">D: store(y)     // 汇合</span></pre>
+      <div>
+        <div style="font-size:.8rem;color:var(--muted)">当前参与执行的线程</div>
+        <div class="lanes" id="lanes"></div>
+        <table class="stk"><thead><tr><th>汇合点 PC</th><th>下一条 PC</th><th>活跃掩码</th></tr></thead><tbody id="stk"></tbody></table>
+        <div style="font-size:.74rem;color:var(--muted);margin-top:.3rem">紫色那行 = 当前栈顶（TOS），经典模型按它推进控制流</div>
+      </div>
+      <div>
+        <div class="explain" id="explain"></div>
+        <div class="ctrl"><button id="dPrev">← 上一步</button><button id="dNext">下一步 →</button><span class="pg" id="dPg"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">注：one/two/three-loop 是书中的分析近似，不是所有 GPU 都采用的固定结构。页面中的 SIMT 栈示例主要对应经典的统一控制流模型；Volta 及之后的 NVIDIA 架构在程序计数器和线程调度上有更细粒度的机制。具体实现应以目标架构文档为准。配套 llm-engine-viz · 与 gpu-arch-path.html 同风格。</div>
+</div>
+
+<script>
+const LOOPS = {
+  1: { name: "一圈（one-loop）", color: "var(--l1)",
+    a: "先只分析控制流和基本发射路径，暂不展开结果延迟与寄存器读取端口。",
+    s: ["32 个线程共用一条指令流，遇到分支时，用 SIMT 状态记录活跃线程和重新汇合位置。",
+        "最简单的 warp 调度模型：某个 warp 暂时不能继续时，选择其他 warp。"],
+    h: ["SIMT 状态 / 栈（经典模型）","活跃掩码（active mask）","汇合点 PC","基本的 warp 调度器"],
+    m: "这个近似没有展开指令结果何时可用。要分析数据依赖，需要加入记分牌和写回路径 → 两圈",
+    b: ["3.1 one-loop 近似","3.1.1 SIMT 执行掩码与栈","3.1.3 warp 调度"] },
+  2: { name: "两圈（two-loop）", color: "var(--l2)",
+    a: "加入多周期执行和访存延迟，但暂时把寄存器读取看作可完成的操作。",
+    s: ["把取指与发射分开，中间加入指令缓冲（I-buffer），让每个 warp 保留若干条待发指令。",
+        "用记分牌记录未完成的结果，判断同一 warp 的下一条指令是否存在数据依赖。"],
+    h: ["指令缓冲（I-buffer）","记分牌（scoreboard）","写回 → 记分牌的依赖更新"],
+    m: "这个近似没有展开寄存器堆的端口、bank 和操作数收集限制 → 三圈",
+    b: ["3.2 two-loop 近似"] },
+  3: { name: "三圈（three-loop）", color: "var(--l3)",
+    a: "在当前分析范围内，再加入寄存器读取和执行资源约束；这仍是分析模型，不是所有 GPU 的固定实现。",
+    s: ["寄存器堆划分为多个 bank，用较低的端口成本提供并行读取能力。",
+        "多个 warp 同时请求寄存器时，bank 仲裁和操作数收集器决定哪些源操作数可以先准备好。",
+        "目标执行单元若暂时没有资源，也会形成结构资源约束（structural hazard）。"],
+    h: ["寄存器 bank","操作数收集单元（operand collector）","bank 仲裁器（arbiter）","收集器和执行单元的资源状态"],
+    m: "再往后还要分析缓存、未完成访存和 DRAM 调度；它们不属于这三圈的内部细节 → 第 4 章",
+    b: ["3.3 three-loop 近似"] },
+};
+
+let cur = 3;
+const $ = id => document.getElementById(id);
+const ul = a => "<ul>" + a.map(x => `<li>${x}</li>`).join("") + "</ul>";
+function setLoop(n) {
+  cur = n;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", +t.dataset.loop === n));
+  $("g1").classList.toggle("hidden", n < 1);
+  $("g2").classList.toggle("hidden", n < 2);
+  $("g3").classList.toggle("hidden", n < 3);
+  $("note1").classList.toggle("hidden", n !== 1);
+  $("note2").classList.toggle("hidden", n !== 2);
+  $("s-ibuf").classList.toggle("dim", n < 2);
+  $("sb").classList.toggle("dim", n < 2);
+  $("s-oc").classList.toggle("dim", n < 3);
+  [1,2,3].forEach(g => $("gate" + g).classList.toggle("off", g > n));
+  const L = LOOPS[n];
+  $("card").innerHTML = `<h2><span style="width:.8rem;height:.8rem;border-radius:50%;background:${L.color};display:inline-block"></span>${L.name}</h2>
+    <div class="grid5">
+      <div class="q" style="border-top-color:#f3c46b"><h3>假设了什么</h3><div class="body">${L.a}</div></div>
+      <div class="q" style="border-top-color:${L.color}"><h3>这圈解决什么</h3><div class="body">${ul(L.s)}</div></div>
+      <div class="q" style="border-top-color:#5b9fff"><h3>新加的硬件</h3><div class="body">${ul(L.h)}</div></div>
+      <div class="q" style="border-top-color:#f87171"><h3>还缺什么（引出下一圈）</h3><div class="body">${L.m}</div></div>
+      <div class="q" style="border-top-color:#3ecf8e"><h3>对应书中小节</h3><div class="body">${ul(L.b)}</div></div>
+    </div>`;
+}
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => setLoop(+t.dataset.loop)));
+setLoop(3);
+
+// SIMT stack demo
+const ALL = "11111111", IF = "11110000", ELSE = "00001111";
+const DEMO = [
+  { pc: "A", act: ALL, stk: [["—", "A", ALL]],
+    ex: "8 个线程一起执行 A，算出各自的条件。栈里只有一项：全体线程，下一条是 A。" },
+  { pc: "B", act: IF, stk: [["—", "D", ALL], ["D", "C", ELSE], ["D", "B", IF]],
+    ex: "分叉了。先把原来那项的「下一条」改成汇合点 D；再压入 else（C，线程 4–7）和 if（B，线程 0–3）。栈顶是 if，所以先跑 B，只有线程 0–3 干活。" },
+  { pc: "C", act: ELSE, stk: [["—", "D", ALL], ["D", "C", ELSE]],
+    ex: "if 那边走到 D，正好等于栈顶的汇合点 → 弹出。新栈顶是 else，跑 C，只有线程 4–7 干活。" },
+  { pc: "D", act: ALL, stk: [["—", "D", ALL]],
+    ex: "else 也走到 D → 再弹出。回到最早那项：8 个线程重新合在一起执行 D。分叉期间 SIMD 利用率只有一半。" },
+];
+let ds = 0;
+function drawDemo() {
+  const d = DEMO[ds];
+  document.querySelectorAll("#code span").forEach(s => s.classList.toggle("cur", s.dataset.pc === d.pc));
+  $("lanes").innerHTML = [...d.act].map((b, i) => `<span class="lane ${b === "1" ? "on" : ""}">T${i}</span>`).join("");
+  const rows = d.stk.slice().reverse();
+  $("stk").innerHTML = rows.map((r, i) => `<tr class="${i === 0 ? "tos" : ""}"><td>${r[0]}</td><td>${r[1]}</td><td class="mask">${r[2]}</td></tr>`).join("");
+  $("explain").textContent = d.ex;
+  $("dPrev").disabled = ds === 0; $("dNext").disabled = ds === DEMO.length - 1;
+  $("dPg").textContent = `${ds + 1} / ${DEMO.length}`;
+}
+$("dPrev").onclick = () => { ds--; drawDemo(); };
+$("dNext").onclick = () => { ds++; drawDemo(); };
+drawDemo();
+</script>
+</body>
+</html>

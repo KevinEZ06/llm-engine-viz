@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GPGPU 架构理解路径 · llm-engine-viz</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #152033; --panel2: #0f1a2c; --border: #2a3a52;
+    --text: #e8eef7; --muted: #8b9bb4;
+    --blue: #5b9fff; --blue-bg: #12304a; --blue-bd: #3b6eb5;
+    --amber: #e8a317; --amber-bg: #3a2a12; --amber-bd: #b45309;
+    --green: #3ecf8e; --purple: #c4b5fd;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%;
+    font-family: ui-sans-serif, system-ui, -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+    background: var(--bg); color: var(--text); }
+  .page { max-width: 96rem; margin: 0 auto; padding: 1.25rem 1.25rem 2.5rem; }
+  h1 { margin: 0 0 .35rem; font-size: 1.45rem;
+    background: linear-gradient(90deg, #5b9fff, #c4b5fd);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lead { margin: 0 0 .85rem; color: var(--muted); font-size: .92rem; line-height: 1.55; max-width: 60rem; }
+  .legend { display: flex; flex-wrap: wrap; gap: .9rem; font-size: .75rem; color: var(--muted); margin-bottom: 1rem; align-items: center; }
+  .legend span { display: inline-flex; align-items: center; gap: .35rem; }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 1.25rem; align-items: start; }
+  @media (max-width: 960px) { .layout { grid-template-columns: 1fr; } .detail { position: static !important; } }
+
+  .chain { display: flex; flex-direction: column; align-items: stretch; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: .75rem;
+    padding: .7rem .9rem; cursor: pointer; transition: border-color .15s, background .15s, transform .15s; outline: none; }
+  .card:hover { border-color: #3b6eb5; }
+  .card:focus-visible { box-shadow: 0 0 0 2px var(--purple); }
+  .card.active { border-color: var(--purple); background: #1a2540; box-shadow: 0 0 0 1px var(--purple) inset; }
+  .card-head { display: flex; align-items: center; gap: .55rem; flex-wrap: wrap; }
+  .num { width: 1.6rem; height: 1.6rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+    font-size: .8rem; font-weight: 700; background: #1e3a5f; color: var(--blue); flex: none; }
+  .card.active .num { background: var(--purple); color: #1a1530; }
+  .card-title { font-weight: 650; font-size: .98rem; }
+  .tags { display: flex; gap: .35rem; margin-left: auto; flex-wrap: wrap; }
+  .tag { font-size: .68rem; padding: .1rem .45rem; border-radius: .35rem; border: 1px solid; white-space: nowrap; }
+  .tag.data { color: var(--blue); background: var(--blue-bg); border-color: var(--blue-bd); }
+  .tag.ctrl { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-bd); }
+  .tag.ch { color: var(--muted); background: var(--panel2); border-color: var(--border); }
+  .card-sub { margin: .35rem 0 0 2.15rem; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+
+  .arrow { display: flex; align-items: stretch; min-height: 3.1rem; padding-left: 1.05rem; }
+  .arrow .line { width: 14px; flex: none; position: relative; }
+  .arrow .line::before { content: ""; position: absolute; left: 6px; top: 0; bottom: 8px; width: 2px; background: #3b4d68; }
+  .arrow .line::after { content: ""; position: absolute; left: 1px; bottom: 0; border: 6px solid transparent; border-top: 8px solid #3b4d68; border-bottom: 0; }
+  .arrow .why { align-self: center; margin-left: .8rem; font-size: .8rem; line-height: 1.45; color: #f3c46b; padding: .3rem 0; }
+  .arrow .why b { color: var(--green); font-weight: 600; }
+
+  .detail { position: sticky; top: 1rem; background: var(--panel); border: 1px solid var(--border); border-radius: .85rem; padding: 1rem 1.15rem 1.1rem; }
+  .detail h2 { margin: 0 0 .25rem; font-size: 1.15rem; }
+  .detail .dtags { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: .6rem; }
+  .detail .from { font-size: .82rem; color: var(--muted); margin-bottom: .8rem; line-height: 1.5; }
+  .q { border-left: 3px solid var(--border); padding: .45rem .75rem; margin-bottom: .65rem; background: var(--panel2); border-radius: 0 .5rem .5rem 0; }
+  .q h3 { margin: 0 0 .3rem; font-size: .84rem; color: var(--muted); font-weight: 600; }
+  .q .body { font-size: .88rem; line-height: 1.6; }
+  .q ul { margin: .1rem 0 0; padding-left: 1.1rem; }
+  .q li { margin: .15rem 0; }
+  .q.q1 { border-left-color: #f87171; } .q.q2 { border-left-color: var(--amber); }
+  .q.q3 { border-left-color: var(--blue); } .q.q4 { border-left-color: var(--green); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82em; background: #0b1424; border: 1px solid var(--border); padding: 0 .3rem; border-radius: .25rem; color: #cbd5e1; }
+  .nav { display: flex; justify-content: space-between; margin-top: .8rem; }
+  .nav button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); border-radius: .45rem; padding: .35rem .8rem; cursor: pointer; font-size: .8rem; }
+  .nav button:hover:not(:disabled) { border-color: var(--purple); }
+  .nav button:disabled { opacity: .35; cursor: default; }
+  .note { margin-top: .9rem; font-size: .78rem; color: var(--muted); border: 1px dashed var(--border); border-radius: .5rem; padding: .5rem .7rem; line-height: 1.5; }
+
+  .footer { margin-top: 1.6rem; background: var(--panel); border: 1px solid var(--border); border-radius: .85rem; padding: .9rem 1.1rem; }
+  .footer h2 { margin: 0 0 .7rem; font-size: 1rem; color: var(--purple); }
+  .maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+  @media (max-width: 960px) { .maps { grid-template-columns: 1fr; } }
+  .map { background: var(--panel2); border: 1px solid var(--border); border-radius: .6rem; padding: .6rem .75rem; font-size: .84rem; line-height: 1.55; }
+  .map .l { color: var(--blue); font-weight: 600; } .map .r { color: var(--green); font-weight: 600; }
+  .map .eq { color: var(--muted); margin: 0 .25rem; }
+  .map p { margin: .35rem 0 0; color: var(--muted); font-size: .8rem; }
+  .foot { margin-top: .85rem; font-size: .76rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>《General-Purpose Graphics Processor Architectures》理解路径</h1>
+  <p class="lead">这是一条用于理解 GPU 的简化路径：从编程模型开始，逐步加入 SIMT 执行、调度、寄存器读取、缓存和 DRAM。每一步只突出一个主要机制，实际 GPU 通常会把这些机制并行组合。Aamodt、Fung、Rogers（2018）。点左边任意一步，右边看「四个问题」。</p>
+  <div class="legend">
+    <span><span class="tag data">数据路径</span> 数据如何读取、暂存和传输</span>
+    <span><span class="tag ctrl">控制路径</span> 指令如何选择和推进</span>
+    <span style="color:#f3c46b">箭头上的黄字 = 当前模型要处理的限制</span>
+    <span style="color:var(--green)">→ 绿字 = 对应的硬件或软件机制</span>
+  </div>
+
+  <div class="layout">
+    <div class="chain" id="chain"></div>
+    <aside class="detail" id="detail" aria-live="polite"></aside>
+  </div>
+
+  <section class="footer">
+    <h2>和 mini-sglang 的性能机制可以这样类比</h2>
+    <div class="maps">
+      <div class="map"><span class="l">warp 切换来隐藏访存延迟</span><span class="eq">↔</span><span class="r">连续批处理减少空闲</span>
+        <p>这是性能机制上的类比，不是硬件结构的一一对应：一个 warp 等待数据时可以选择其他 warp；一个请求完成后，调度器可以让新请求进入 batch。</p></div>
+      <div class="map"><span class="l">合并访存 / 分 bank</span><span class="eq">↔</span><span class="r">attention kernel 的 KV 布局</span>
+        <p>KV 的页、头和维度布局会影响全局内存访问是否合并、事务数量以及片上暂存的访问方式。只有明确数据是否经过 shared memory，才能进一步讨论 shared-memory bank conflict。</p></div>
+      <div class="map"><span class="l">MSHR / DRAM 带宽</span><span class="eq">↔</span><span class="r">decode 的 KV 读取压力</span>
+        <p>decode 算得少、读得多，通常卡在显存带宽；batch 很大时才可能转向算力</p></div>
+    </div>
+  </section>
+  <div class="foot">配套 llm-engine-viz · request-flow 系列同风格。内容按《General-Purpose Graphics Processor Architectures》的经典模型整理；不同 GPU 的调度、缓存、内存控制器和线程控制方式可能不同，具体实现应以目标架构文档为准。</div>
+</div>
+
+<script>
+const STEPS = [
+  { t: "编程模型", ch: "Ch2", kind: ["data","ctrl"], sub: "线程 → warp（线程束） → block / work-group → grid，软件模型如何映射到执行单元",
+    why: null,
+    q1: "先明确软件接口：一个 kernel 可以启动大量线程，每个线程处理自己的索引和数据。线程如何分组，决定了同步、共享存储和调度的范围。",
+    q2: "CUDA 把线程组织成 block（书中也称 CTA）和 grid；硬件通常以 block 为资源分配单位，将一个 block 放到一个 SM 上执行，再以 warp（线程束）为调度和执行粒度。具体映射依赖架构。",
+    q3: ["线程 / 线程编号（<code>threadIdx</code>、<code>blockIdx</code>）","warp：厂商和架构定义的线程分组","block / CTA：通常共享片上存储，并能使用 block 内屏障","grid：一次 kernel 启动的全部 block","CUDA / OpenCL 的叫法对照（OpenCL：work-item / work-group）"],
+    q4: ["占用率（occupancy）：一个 SM 上实际驻留的 warp 数 ÷ 架构允许的最大驻留 warp 数","它受寄存器、片上共享存储、block 大小和架构上限限制；占用率高不必然代表性能高"] },
+  { t: "最简 SIMT 核", ch: "Ch3 · one-loop", kind: ["ctrl"], sub: "一个 warp 共享一条指令流",
+    why: "如果每个线程都单独取指和译码，前端面积和能耗会明显增加",
+    q1: "GPU 需要同时处理大量线程。若每个线程都配独立的取指、译码和发射前端，硬件成本会很高。",
+    q2: "控制路径：一个 warp（线程束）共享取指 / 译码路径，一条指令作用于多个线程的数据。这是 SIMT 的基本抽象，也是书中 one-loop 近似的起点；实际执行宽度由架构决定。",
+    q3: ["warp 级程序状态","多个并行执行通道（每个通道处理一个线程）","每个线程独立的寄存器状态","和 CPU 的 SIMD（如 AVX）不同：SIMT 里每个线程有自己的寄存器和独立的分支语义，分叉由硬件掩码处理，程序员按单线程写代码；SIMD 要程序员显式操作向量。"],
+    q4: ["每周期完成的指令或线程操作数","相对于独立线程前端的面积、能耗和控制开销"] },
+  { t: "SIMT 栈 / 重新汇合", ch: "Ch3 · one-loop", kind: ["ctrl"], sub: "同一 warp 出现分支时如何推进",
+    why: "不同线程可能选择不同分支，但 warp（线程束）仍需维护一条可推进的控制流",
+    q1: "分支分叉（branch divergence）：同一 warp 的线程条件不同，分支路径需要分时执行，未选中路径的线程暂时不参与。",
+    q2: "经典 SIMT 模型用活跃掩码和重新汇合位置记录两条路径：先执行一条路径，再执行另一条路径，最后在共同的汇合点恢复更完整的线程集合。",
+    q3: ["活跃掩码（active mask）：当前参与执行的线程","汇合点 PC：常用分支的直接后支配点（immediate post-dominator）作为分析位置","SIMT 状态 / 栈表项：〈汇合点 PC，下一条 PC，活跃掩码〉"],
+    q4: ["warp 中实际参与当前指令的线程比例","分支路径差异带来的额外执行指令数和吞吐损失"] },
+  { t: "多 warp 切换 + 记分牌", ch: "Ch3 · two-loop", kind: ["ctrl"], sub: "一个 warp 等待时选择其他就绪 warp",
+    why: "访存和长延迟运算可能跨越多个周期，单个 warp 无法持续发射",
+    q1: "如果只有一个 warp，它等待数据时，相关执行资源可能没有可发射的指令。",
+    q2: "控制路径：同时保留多个可驻留 warp；调度器在每个周期从就绪候选中选择一个。这是 two-loop 近似加入的延迟隐藏机制。",
+    q3: ["指令缓冲（I-buffer）：为每个 warp 保留待发指令","记分牌（scoreboard）：记录未完成结果和相关资源，避免使用尚未就绪的数据","warp 调度器：可采用轮询、优先级或 GTO 等策略，具体策略依赖实现"],
+    q4: ["IPC（每周期完成的指令或操作数）","没有可发射 warp 的周期比例","访存延迟被其他 warp 覆盖的程度"] },
+  { t: "寄存器分 bank + 操作数收集器", ch: "Ch3 · three-loop", kind: ["data"], sub: "在端口有限的条件下准备源操作数",
+    why: "多个 warp 同时读取多个源寄存器时，寄存器堆的端口和带宽有限",
+    q1: "完全多端口的寄存器堆面积和功耗较高，而有限端口又难以同时满足多个发射请求。",
+    q2: "数据路径：寄存器堆划分为多个 bank，bank 仲裁决定请求的读取顺序；操作数收集器暂存已到达的源操作数，待指令的输入准备好后再送往执行单元。这是 three-loop 近似中的一类约束。",
+    q3: ["寄存器 bank（寄存器到 bank 的映射）","操作数收集单元（operand collector）","bank 仲裁器：处理同一周期对同一 bank 的竞争","执行单元资源状态：决定指令能否进入目标流水线"],
+    q4: ["寄存器读取冲突和服务轮数","操作数收集等待造成的发射停顿","各类执行单元的利用率"] },
+  { t: "合并访存 + 共享内存", ch: "Ch4", kind: ["data"], sub: "减少全局内存事务，并利用片上暂存",
+    why: "warp（线程束）中的地址访问分散时，会产生更多内存事务并降低有效带宽",
+    q1: "线程访问相邻或集中区域时，内存系统更容易用较少的事务服务；访问分散时，事务数量增加，带宽利用率可能下降。",
+    q2: "数据路径：coalescing 根据 warp 的地址访问生成内存事务；共享内存则是 block 可显式管理的片上存储，适合缓存 block 内重复使用的数据。两者是不同层次的机制。",
+    q3: ["合并访问（coalescing）：根据地址分布减少全局内存事务","共享内存（shared memory）：block 内显式管理的片上存储","block 内屏障 <code>__syncthreads()</code>：协调 block 内线程的执行和共享数据访问"],
+    q4: ["每次 warp 访存产生的事务数","有效带宽 ÷ 峰值带宽","共享数据的复用率"] },
+  { t: "共享内存 bank 划分", ch: "Ch4", kind: ["data"], sub: "处理片上共享存储的 bank 访问竞争",
+    why: "多个线程访问共享内存的同一 bank 时，访问请求可能需要分多个周期完成",
+    q1: "共享内存通常也划分为多个 bank。同一 warp（线程束）访问同一 bank 的不同地址时，可能产生 bank conflict；同一地址的广播行为依赖架构和访问模式。",
+    q2: "数据路径：能够并行服务的不同 bank 请求同时处理，发生竞争的请求按架构规则分批完成。这个问题属于 shared memory 访问，不等同于全局内存 coalescing。",
+    q3: ["bank 映射：地址 → bank 编号","冲突检测与访问分批","软件侧手段：padding、转置或调整数据布局"],
+    q4: ["bank conflict 次数或冲突度","每次访问平均需要的服务轮数","共享内存有效吞吐"] },
+  { t: "L1 / L2 + MSHR", ch: "Ch4", kind: ["data"], sub: "让缓存能够容纳多个未完成的 miss",
+    why: "大量并发访存会产生许多同时进行的 cache miss",
+    q1: "如果一次 cache miss 就阻塞整个缓存入口，其他独立请求也会被迫等待，访存并发度会下降。",
+    q2: "典型的非阻塞缓存模型用 MSHR 记录未完成 miss，并继续接收其他不依赖这些数据的请求；依赖 miss 数据的指令仍然要等待。相同 cache line 的请求还可以合并。L2 常被组织成多个 slice，但具体连接方式依赖架构。",
+    q3: ["MSHR（miss status holding register）：记录未完成的 cache miss","L2 slice：按架构组织的共享缓存分片","片上网络（interconnect）：连接 SM、缓存分片和内存系统"],
+    q4: ["L1 / L2 命中率","未完成 miss 数和 MSHR 占用率","MSHR 满导致的停顿周期"] },
+  { t: "DRAM 调度", ch: "Ch4", kind: ["data","ctrl"], sub: "在请求队列和 DRAM 时序约束下安排访问",
+    why: "缓存未命中后，DRAM 访问延迟和并行度决定剩余时间",
+    q1: "DRAM 的行缓冲和时序约束会影响访问成本；请求顺序不合适时，行切换和等待可能降低有效带宽。",
+    q2: "数据路径 + 控制路径：内存控制器根据队列状态、行命中和公平性等因素选择请求。FR-FCFS 是常见的分析或实现策略之一，不是所有 GPU 的统一规则。",
+    q3: ["内存控制器 / 请求队列","行缓冲（row buffer）：当前激活的 DRAM 行","调度策略：例如 FR-FCFS 或带公平性约束的变体"],
+    q4: ["DRAM 带宽利用率","行缓冲命中率","请求排队时间和服务延迟"] },
+  { t: "剩下的研究方向", ch: "Ch5", kind: ["data","ctrl"], sub: "在调度、缓存、内存和能耗之间继续权衡",
+    why: "基本机制确定后，性能仍取决于访问模式、资源分配和功耗约束",
+    q1: "同一套硬件在不同访问模式下可能表现不同：调度会影响延迟隐藏和局部性，缓存容量会影响命中率，片上数据搬运和寄存器读取也会消耗能量。",
+    q2: "研究方向可以分别作用于控制路径（调度和同步）或数据路径（缓存、内存、一致性和数据搬运），通常需要同时考虑性能、公平性和能耗。",
+    q3: ["调度策略：兼顾延迟隐藏、局部性和公平性","缓存管理：限制并发、选择性绕过或调整替换策略","一致性与内存模型：规定不同执行单元观察读写的条件","能耗：减少寄存器堆和片上数据搬运的动态功耗"],
+    q4: ["IPC、命中率、带宽利用率和尾部延迟","能耗 / 每瓦性能","公平性和资源占用"] },
+];
+
+const chain = document.getElementById("chain");
+const detail = document.getElementById("detail");
+const tagHTML = (s) => s.kind.map(k => k === "data" ? '<span class="tag data">数据路径</span>' : '<span class="tag ctrl">控制路径</span>').join("") + `<span class="tag ch">${s.ch}</span>`;
+const SOLVE = ["", "最简 SIMT 核", "SIMT 栈 / 重新汇合", "多 warp 切换 + 记分牌", "分 bank + 操作数收集器", "合并访存 + 共享内存", "bank 划分 / 冲突串行化", "L1/L2 + MSHR", "DRAM 调度", "第 5 章研究方向"];
+
+STEPS.forEach((s, i) => {
+  if (s.why) {
+    const a = document.createElement("div");
+    a.className = "arrow";
+    a.innerHTML = `<div class="line"></div><div class="why">${s.why}<br><b>→ ${SOLVE[i]}</b></div>`;
+    chain.appendChild(a);
+  }
+  const c = document.createElement("div");
+  c.className = "card"; c.tabIndex = 0; c.dataset.step = i;
+  c.innerHTML = `<div class="card-head"><span class="num">${i}</span><span class="card-title">${s.t}</span><span class="tags">${tagHTML(s)}</span></div><div class="card-sub">${s.sub}</div>`;
+  c.addEventListener("click", () => select(i));
+  c.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(i); } });
+  chain.appendChild(c);
+});
+
+const list = a => "<ul>" + a.map(x => `<li>${x}</li>`).join("") + "</ul>";
+function select(i) {
+  document.querySelectorAll(".card").forEach(c => c.classList.toggle("active", +c.dataset.step === i));
+  const s = STEPS[i];
+  detail.innerHTML = `
+    <h2>${i}. ${s.t}</h2>
+    <div class="dtags">${tagHTML(s)}</div>
+    <div class="from">${s.why ? "当前要处理的限制：" + s.why : "起点：先看懂软件如何描述并行，再看硬件如何执行。"}</div>
+    <div class="q q1"><h3>① 需要处理的限制</h3><div class="body">${s.q1}</div></div>
+    <div class="q q2"><h3>② 改了数据路径还是控制路径的哪部分</h3><div class="body">${s.q2}</div></div>
+    <div class="q q3"><h3>③ 要加哪些对象 / 接口</h3><div class="body">${list(s.q3)}</div></div>
+    <div class="q q4"><h3>④ 用什么指标证明有效</h3><div class="body">${list(s.q4)}</div></div>
+    <div class="nav"><button id="prev" ${i === 0 ? "disabled" : ""}>← 上一步</button><button id="next" ${i === STEPS.length - 1 ? "disabled" : ""}>下一步 →</button></div>
+    <div class="note">注：页面沿用书中的经典 SIMT、缓存和 DRAM 模型；它不覆盖后续架构的全部线程控制、矩阵计算和内存系统细节。本页未展开 Tensor Core（Volta 起加入的矩阵乘专用单元；LLM 的 prefill 大矩阵乘主要靠它）。分析具体 GPU 时，应结合该架构的官方文档。</div>`;
+  document.getElementById("prev").onclick = () => select(i - 1);
+  document.getElementById("next").onclick = () => select(i + 1);
+}
+select(0);
+</script>
+</body>
+</html>
