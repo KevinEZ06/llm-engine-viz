@@ -44,17 +44,17 @@
 | 2 | Part 0 · 0.2 部署第一个 SGLang 服务 | ✅ | 没有 | — | 实操暂不计划可视化 |
 | 3 | Part I · 第1章 LLM 入门 | ✅ | 没有 | — | Transformer / 暂未补充 |
 | 4 | Part I · 第2章 推理入门 | ✅ | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html) · [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | Prefill/Decode 拆分；请求落在哪一层 |
-| 5 | Part I · 第3章 GPU 入门 | 🔄 | **部分已有** | [gpu-arch-path.html](https://kevinez06.github.io/llm-engine-viz/gpu-arch-path.html) · [simt-loops.html](https://kevinez06.github.io/llm-engine-viz/simt-loops.html) | 执行模型（warp（线程束）/ SIMT / 分叉 / 延迟隐藏）和访存层次；A100 结构、HBM 数字尚未补充 |
+| 5 | Part I · 第3章 GPU 入门 | ✅ | **部分已有** | [gpu-arch-path.html](https://kevinez06.github.io/llm-engine-viz/gpu-arch-path.html) · [simt-loops.html](https://kevinez06.github.io/llm-engine-viz/simt-loops.html) | 执行模型（warp（线程束）/ SIMT / 分叉 / 延迟隐藏）和访存层次；A100 结构、HBM 数字尚未补充 |
 | 6 | Part I · 第4章 KV Cache | ✅ | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 逻辑块 ↔ 物理页 |
-| 7 | Part I · 第5章 Benchmark | 🔄 | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html)（TTFT 分解）· [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | TTFT / 尾延迟直觉 |
-| 8 | Part II · 1 引擎长什么样 | 📝 | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 分层总览；模块图仍可再画 |
-| 9 | Part II · 2 Path of a Request | ✅ | **已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | Token 全链路 |
+| 7 | Part I · 第5章 Benchmark | ✅ | **已有** | [kvpd.html](https://kevinez06.github.io/llm-engine-viz/kvpd.html)（TTFT 分解）· [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | TTFT / 尾延迟直觉 |
+| 8 | Part II · 1 引擎长什么样 | ✅ | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html) | 分层总览；模块图仍可再画 |
+| 9 | Part II · 2 一个请求的旅程（Path of a Request） | ✅ | **已有** | [request-flow.html](https://kevinez06.github.io/llm-engine-viz/request-flow.html)（主 · 单机引擎内） · [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html)（集群全链路） | TokenizerManager → Scheduler → Detokenizer（ZMQ）；网关 → K8s → P/D |
 | 10 | Part II · 3 Forward & Generation | 🚧 | 没有 | — | 前向/生成循环尚未补充 |
 | 11 | Part II · 4 KV Cache 实现 | 🚧 | **已有**（复用） | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) | 与 I.4 同页，手搓前复习 |
-| 12 | Part II · 5 HTTP 与并发 | 🚧 | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html)（入口） | 服务化/并发细节尚未补充 |
+| 12 | Part II · 5 HTTP 与并发 | ✅ | **部分已有** | [journey.html](https://kevinez06.github.io/llm-engine-viz/journey.html)（入口） | 服务化/并发细节尚未补充 |
 | 13 | Part II · 6 Continuous Batching | 🚧 | **已有** | [batching.html](https://kevinez06.github.io/llm-engine-viz/batching.html) | 静态批 vs 连续批 vs chunk |
 | 14 | Part II · 7 Paged KV Cache | 🚧 | **已有** | [PagedAttention.html](https://kevinez06.github.io/llm-engine-viz/PagedAttention.html) · [cacheschedule.html](https://kevinez06.github.io/llm-engine-viz/cacheschedule.html) | 分页；Swap / Recompute |
-| 15 | Part II · 8 RadixAttention | 🚧 | **已有** | [radix.html](https://kevinez06.github.io/llm-engine-viz/radix.html) | 前缀树、加锁、LRU |
+| 15 | Part II · 8 RadixAttention | ✅ | **已有** | [radix.html](https://kevinez06.github.io/llm-engine-viz/radix.html) | 前缀树、加锁、LRU |
 | 16 | Part II · 9 多进程与 TP | 🚧 | **已有** | [parallel.html](https://kevinez06.github.io/llm-engine-viz/parallel.html) | QKV 切片、AllReduce；Decode 收小 TP |
 | 17 | Part II · 10 Speculative Decoding | 🚧 | **已有** | [mtp.html](https://kevinez06.github.io/llm-engine-viz/mtp.html) | draft → verify → accept |
 | 18 | Part III · 1 Attention Backends & CUDA Graph | 🚧 | 没有 | — | 尚未补充，可参考官方 https://www.sglang.io/blog/breakable-cuda-graph |
