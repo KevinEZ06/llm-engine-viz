@@ -25,7 +25,7 @@
 | [pipeline.html](https://kevinez06.github.io/llm-engine-viz/pipeline.html) | SMG 路由打分 |
 | [k8s.html](https://kevinez06.github.io/llm-engine-viz/k8s.html) | K8s + Mooncake 全局 KV |
 | [ring_attention.html](https://kevinez06.github.io/llm-engine-viz/ring_attention.html) | Ring Attention / Context Parallel |
-| [gpu-arch-path.html](https://kevinez06.github.io/llm-engine-viz/gpu-arch-path.html) | GPU介绍：从 SIMT 核到访存层次，每一步回答四个问题 |
+| [gpu-arch-path.html](https://kevinez06.github.io/llm-engine-viz/gpu-arch-path.html) | GPU介绍：从 SIMT 核到访存层次 |
 | [simt-loops.html](https://kevinez06.github.io/llm-engine-viz/simt-loops.html) | SIMT 深入浅出：分叉 / 数据依赖 / 操作数读取，含 if/else 栈演示 |
 
 建议顺序：先看 [总览](https://kevinez06.github.io/llm-engine-viz/)，再按 缓存与注意力 → 连续批与调度 → 推测解码 → 并行与全链路。
