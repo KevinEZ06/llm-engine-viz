@@ -14,6 +14,7 @@
       --blue: #5b9fff;
       --amber: #e8a317;
       --green: #3ecf8e;
+      --red: #f87171;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -33,15 +34,65 @@
       display: flex; flex-wrap: wrap; gap: .75rem;
       font-size: .75rem; color: var(--muted); margin-bottom: .85rem;
     }
-    .legend span { display: inline-flex; align-items: center; gap: .35rem; }
+    .legend span { display: inline-flex; align-items: center; gap: .35rem; opacity: .35; transition: opacity .45s; }
+    .legend span.on { opacity: 1; }
     .swatch { width: 1.4rem; height: 0; border-top: 2.2px solid; display: inline-block; }
     .swatch.data { border-color: #5b9fff; }
     .swatch.ctrl { border-color: #e8a317; border-style: solid; border-top-style: dashed; }
+    .swatch.abort { border-color: #f87171; border-style: solid; border-top-style: dashed; }
     .stage-dot { width: .7rem; height: .7rem; border-radius: 3px; display: inline-block; border: 1px solid; }
+
+    /* 步进控制条 */
+    .ctl {
+      display: flex; flex-wrap: wrap; align-items: center; gap: .5rem;
+      background: var(--panel); border: 1px solid var(--border); border-radius: .85rem;
+      padding: .6rem .75rem; margin-bottom: .6rem;
+    }
+    .ctl button {
+      background: #1c3358; color: #dbeafe; border: 1px solid #3b6eb5; border-radius: .5rem;
+      padding: .35rem .75rem; font: inherit; font-size: .8rem; cursor: pointer;
+    }
+    .ctl button:hover { background: #23407a; }
+    .ctl button:disabled { opacity: .4; cursor: default; }
+    .ctl button.ghost { background: transparent; color: var(--muted); border-color: var(--border); }
+    .ctl button.play.on { background: #3a2a12; border-color: #e8a317; color: #fcd34d; }
+    .ctl .pos { font-size: .75rem; color: var(--muted); min-width: 5.5rem; }
+    .ctl .dots { display: flex; gap: 3px; }
+    .ctl .dots i { width: 8px; height: 8px; border-radius: 2px; background: #243044; display: inline-block; cursor: pointer; }
+    .ctl .dots i.done { background: #3b6eb5; }
+    .ctl .dots i.cur { background: #e8a317; }
+    .ctl .dots i.abort { background: #7f1d1d; }
+    .ctl .dots i.abort.done, .ctl .dots i.abort.cur { background: #f87171; }
+    .cap {
+      flex-basis: 100%; font-size: .88rem; line-height: 1.5; color: var(--text);
+      padding-top: .4rem; border-top: 1px dashed var(--border); min-height: 2.6rem;
+    }
+    .cap b { color: #fcd34d; font-weight: 600; }
+    .cap .hint { color: var(--muted); font-size: .78rem; margin-left: .4rem; }
+
     .viz-wrap {
       background: var(--panel); border: 1px solid var(--border);
       border-radius: .85rem; padding: .65rem; overflow-x: auto;
     }
+    /* 揭示组：默认隐藏，按步点亮 */
+    svg .rv { opacity: 0; transition: opacity .45s ease; }
+    svg .rv.on { opacity: 1; }
+    /* 取消那一步：其它已画的内容退到背景，只留红线 */
+    svg.abort-focus .rv.on:not([data-step="16"]) { opacity: .28; }
+    svg.abort-focus .rv.on[data-step="0"] { opacity: .55; }
+    svg .rv.on.now line, svg .rv.on.now path { filter: drop-shadow(0 0 3px rgba(255,255,255,.35)); }
+    /* ZMQ 包：行依次出现，payload 先、控制后 */
+    svg .row { transform: scaleX(0); transform-box: fill-box; transform-origin: left center; transition: transform .4s ease; }
+    svg .row.ctrl-row { transition-delay: .45s; }
+    svg .rv.on .row { transform: scaleX(1); }
+    /* Scheduler 闪烁：未完成则下一轮 */
+    @keyframes pulse { 0%,100% { stroke-width: 1.5; stroke: #e8a317; } 50% { stroke-width: 3.2; stroke: #fcd34d; } }
+    svg .pulse { animation: pulse 1.1s ease-in-out infinite; }
+    @keyframes loopflow { to { stroke-dashoffset: -20; } }
+    svg .rv.now .loop-arrow { animation: loopflow .8s linear infinite; }
+    svg .dim { opacity: .35; transition: opacity .45s; }
+    svg .dim.on { opacity: 1; }
+
     .links { margin-top: 1.1rem; font-size: .82rem; color: var(--muted); line-height: 1.55; }
     .links a { color: var(--blue); }
     .foot { margin-top: .85rem; font-size: .78rem; color: var(--muted); }
@@ -55,14 +106,26 @@
       蓝实线是数据，橙虚线是控制。集群大路径见 <a href="journey.html">全链路</a>。
     </p>
     <div class="legend">
-      <span><i class="swatch data"></i> 数据路径</span>
-      <span><i class="swatch ctrl"></i> 控制路径（与数据并行）</span>
-      <span><i class="stage-dot" style="background:#12304a;border-color:#3b6eb5"></i> 主进程</span>
-      <span><i class="stage-dot" style="background:#3a2a12;border-color:#b45309"></i> 调度与 Worker</span>
-      <span><i class="stage-dot" style="background:#123528;border-color:#15803d"></i> Detokenizer</span>
+      <span data-step="1"><i class="swatch data"></i> 数据路径</span>
+      <span data-step="9"><i class="swatch ctrl"></i> 控制路径（与数据并行）</span>
+      <span data-step="16"><i class="swatch abort"></i> 取消（AbortMsg）</span>
+      <span data-step="0"><i class="stage-dot" style="background:#12304a;border-color:#3b6eb5"></i> 主进程</span>
+      <span data-step="0"><i class="stage-dot" style="background:#3a2a12;border-color:#b45309"></i> 调度与 Worker</span>
+      <span data-step="0"><i class="stage-dot" style="background:#123528;border-color:#15803d"></i> Detokenizer</span>
     </div>
+
+    <div class="ctl" id="ctl">
+      <button id="btnPrev">← 上一步</button>
+      <button id="btnNext">下一步 →</button>
+      <button id="btnPlay" class="play">▶ 自动播放</button>
+      <button id="btnReset" class="ghost">重置</button>
+      <span class="pos" id="pos"></span>
+      <span class="dots" id="dots"></span>
+      <div class="cap" id="cap"></div>
+    </div>
+
     <div class="viz-wrap">
-<svg viewBox="0 0 1040 870" width="100%"
+<svg viewBox="0 0 1040 790" width="100%" id="flow"
          style="display:block;width:100%;min-width:920px;height:auto;">
 
       <defs>
@@ -74,289 +137,441 @@
                 markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L10,5 L0,10 z" fill="#e8a317"/>
         </marker>
+        <marker id="ah-abort" viewBox="0 0 10 10" refX="9" refY="5"
+                markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#f87171"/>
+        </marker>
       </defs>
 
-      <!-- 路径图例（右上） -->
-      <rect x="720" y="10" width="300" height="52" rx="8"
-            fill="#0f1a2c" stroke="#2a3a52"/>
-      <line x1="736" y1="28" x2="796" y2="28"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <text x="806" y="32" font-size="11" fill="#e8eef7">数据路径 · 模型数据</text>
-      <line x1="736" y1="48" x2="796" y2="48"
-            stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
-      <text x="806" y="52" font-size="11" fill="#e8eef7">控制路径 · 请求状态</text>
+      <!-- 路径图例（右上）：框先站好，行按类别点亮 -->
+      <g class="rv" data-step="0">
+        <rect x="720" y="10" width="300" height="52" rx="8"
+              fill="#0f1a2c" stroke="#2a3a52"/>
+      </g>
+      <g class="rv" data-step="1">
+        <line x1="736" y1="28" x2="796" y2="28"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <text x="806" y="32" font-size="11" fill="#e8eef7">数据路径 · 模型数据</text>
+      </g>
+      <g class="rv" data-step="9">
+        <line x1="736" y1="48" x2="796" y2="48"
+              stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
+        <text x="806" y="52" font-size="11" fill="#e8eef7">控制路径 · 请求状态</text>
+      </g>
 
-      <!-- 回程走廊 -->
-      <rect x="930" y="72" width="96" height="560" rx="10"
-            fill="#12304a" stroke="#3b6eb5" stroke-dasharray="3 3"/>
-      <text x="978" y="96" font-size="11" font-weight="600"
-            fill="#5b9fff" text-anchor="middle">回程走廊</text>
+      <!-- 回程走廊：⑦ 回程时才出现 -->
+      <g class="rv" data-step="7">
+        <rect x="930" y="72" width="96" height="560" rx="10"
+              fill="#12304a" stroke="#3b6eb5" stroke-dasharray="3 3"/>
+        <text x="978" y="96" font-size="11" font-weight="600"
+              fill="#5b9fff" text-anchor="middle">回程走廊</text>
+      </g>
 
-      <!-- Client -->
-      <rect x="14" y="100" width="118" height="68" rx="10"
-            fill="#12304a" stroke="#5b9fff" stroke-width="1.5"/>
-      <text x="73" y="128" font-size="13" font-weight="600"
-            fill="#e8eef7" text-anchor="middle">Client</text>
-      <text x="73" y="148" font-size="10.5"
-            fill="#8b9bb4" text-anchor="middle">curl / SDK</text>
+      <!-- 起点：Client + 三个进程框及其组件（步 0 就在） -->
+      <g class="rv" data-step="0">
+        <!-- Client -->
+        <rect x="14" y="100" width="118" height="68" rx="10"
+              fill="#12304a" stroke="#5b9fff" stroke-width="1.5"/>
+        <text x="73" y="128" font-size="13" font-weight="600"
+              fill="#e8eef7" text-anchor="middle">Client</text>
+        <text x="73" y="148" font-size="10.5"
+              fill="#8b9bb4" text-anchor="middle">curl / SDK</text>
 
-      <!-- 阶段① 主进程 -->
-      <rect x="148" y="72" width="775" height="140" rx="12"
-            fill="#12304a" stroke="#3b6eb5" stroke-dasharray="4 3"/>
-      <text x="185" y="88" font-size="12" font-weight="600" fill="#5b9fff">
-        阶段① 主进程
-      </text>
+        <!-- 阶段① 主进程 -->
+        <rect x="148" y="72" width="775" height="140" rx="12"
+              fill="#12304a" stroke="#3b6eb5" stroke-dasharray="4 3"/>
+        <text x="185" y="88" font-size="12" font-weight="600" fill="#5b9fff">
+          阶段① 主进程
+        </text>
 
-      <rect x="180" y="108" width="210" height="52" rx="10"
-            fill="#0f1a2c" stroke="#5b9fff" stroke-width="1.5"/>
-      <text x="285" y="130" font-size="12.5" font-weight="600"
-            fill="#e8eef7" text-anchor="middle">HTTP Server / Engine</text>
-      <text x="285" y="148" font-size="10.5"
-            fill="#8b9bb4" text-anchor="middle">/v1/chat/completions</text>
+        <rect x="180" y="108" width="210" height="52" rx="10"
+              fill="#0f1a2c" stroke="#5b9fff" stroke-width="1.5"/>
+        <text x="285" y="130" font-size="12.5" font-weight="600"
+              fill="#e8eef7" text-anchor="middle">HTTP Server / Engine</text>
+        <text x="285" y="148" font-size="10.5"
+              fill="#8b9bb4" text-anchor="middle">/v1/chat/completions</text>
 
-      <rect x="560" y="108" width="230" height="52" rx="10"
-            fill="#0f1a2c" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="675" y="130" font-size="12.5" font-weight="600"
-            fill="#e8eef7" text-anchor="middle">TokenizerManager</text>
-      <text x="675" y="148" font-size="10.5"
-            fill="#8b9bb4" text-anchor="middle">套模板，切成 token · ReqState</text>
+        <rect x="560" y="108" width="230" height="52" rx="10"
+              fill="#0f1a2c" stroke="#bc8cff" stroke-width="1.5"/>
+        <text x="675" y="130" font-size="12.5" font-weight="600"
+              fill="#e8eef7" text-anchor="middle">TokenizerManager</text>
+        <text x="675" y="148" font-size="10.5"
+              fill="#8b9bb4" text-anchor="middle">套模板，切成 token · ReqState</text>
 
-      <!-- 阶段② Scheduler & Worker 进程 -->
-      <rect x="148" y="240" width="775" height="260" rx="12"
-            fill="#3a2a12" stroke="#b45309" stroke-dasharray="4 3"/>
+        <!-- 阶段② Scheduler & Worker 进程 -->
+        <rect x="148" y="240" width="775" height="260" rx="12"
+              fill="#3a2a12" stroke="#b45309" stroke-dasharray="4 3"/>
+      </g>
 
-      <rect x="610" y="248" width="210" height="22" rx="4"
-            fill="#123528" stroke="#3ecf8e" stroke-width="1"/>
-      <text x="715" y="263" font-size="10" font-weight="600"
-            fill="#3ecf8e" text-anchor="middle">⚡ 支持 PD Disaggregation (PD分离&RDMA)</text>
 
-      <rect x="195" y="280" width="625" height="205" rx="10"
-            fill="#2a1f0e" stroke="#e8a317" stroke-width="1.4"/>
-      <text x="507" y="298" font-size="11" font-weight="600"
-            fill="#e8a317" text-anchor="middle">
-        Decode 循环：未完成则下一轮；结束则释放 KV
-      </text>
+      <g class="rv" data-step="0">
+        <!-- Decode 循环容器：结构先在，标题到 ⑤ 再亮 -->
+        <rect x="195" y="280" width="625" height="205" rx="10"
+              fill="#2a1f0e" stroke="#e8a317" stroke-width="1.4"/>
+      </g>
+      <g class="rv" data-step="5">
+        <text x="507" y="298" font-size="11" font-weight="600"
+              fill="#e8a317" text-anchor="middle">
+          Decode 循环：未完成则下一轮；结束则释放 KV
+        </text>
+      </g>
 
-      <!-- Scheduler 框体 -->
-      <rect x="215" y="312" width="235" height="155" rx="10"
-            fill="#0f1a2c" stroke="#e8a317" stroke-width="1.5"/>
-      <text x="332" y="334" font-size="12.5" font-weight="700"
-            fill="#e8eef7" text-anchor="middle">Scheduler (调度中心)</text>
-      <line x1="225" y1="342" x2="440" y2="342" stroke="#3a2a12" stroke-width="1"/>
-      
-      <text x="228" y="360" font-size="10" fill="#e8a317" font-weight="600">▪ Continuous Batching</text>
-      <text x="340" y="360" font-size="9.5" fill="#8b9bb4">(Iteration级组包)</text>
-      
-      <text x="228" y="382" font-size="10" fill="#e8a317" font-weight="600">▪ RadixAttention</text>
-      <text x="318" y="382" font-size="9.5" fill="#8b9bb4">(树状前缀共享)</text>
+      <g class="rv" data-step="0">
+        <!-- Scheduler 框体 -->
+        <rect id="schedBox" x="215" y="312" width="235" height="155" rx="10"
+              fill="#0f1a2c" stroke="#e8a317" stroke-width="1.5"/>
+        <text x="332" y="334" font-size="12.5" font-weight="700"
+              fill="#e8eef7" text-anchor="middle">Scheduler (调度中心)</text>
+        <line x1="225" y1="342" x2="440" y2="342" stroke="#3a2a12" stroke-width="1"/>
 
-      <text x="228" y="404" font-size="10" fill="#e8a317" font-weight="600">▪ HiCache</text>
-      <text x="278" y="404" font-size="9.5" fill="#8b9bb4">(HBM/DRAM/Disk多级KV)</text>
+        <text x="228" y="360" font-size="10" fill="#e8a317" font-weight="600">▪ Continuous Batching</text>
+        <text x="340" y="360" font-size="9.5" fill="#8b9bb4">(Iteration级组包)</text>
 
-      <text x="228" y="426" font-size="9.5" fill="#8b9bb4">状态：先 Prefill 再 Decode 调度</text>
+        <text x="228" y="382" font-size="10" fill="#e8a317" font-weight="600">▪ RadixAttention</text>
+        <text x="318" y="382" font-size="9.5" fill="#8b9bb4">(树状前缀共享)</text>
 
-      <!-- Worker 框体 -->
-      <rect x="565" y="312" width="245" height="155" rx="10"
-            fill="#0f1a2c" stroke="#5b9fff" stroke-width="1.5"/>
-      <text x="687" y="334" font-size="12.5" font-weight="700"
-            fill="#e8eef7" text-anchor="middle">Worker (TpWorker/Runner)</text>
-      <line x1="575" y1="342" x2="800" y2="342" stroke="#3b6eb5" stroke-width="1"/>
+        <text x="228" y="404" font-size="10" fill="#e8a317" font-weight="600">▪ HiCache</text>
+        <text x="278" y="404" font-size="9.5" fill="#8b9bb4">(HBM/DRAM/Disk多级KV)</text>
 
-      <text x="578" y="360" font-size="10" fill="#5b9fff" font-weight="600">▪ Attention Backend</text>
-      <text x="682" y="360" font-size="9.5" fill="#8b9bb4">(FlashInfer/Paged...)</text>
+        <text x="228" y="426" font-size="9.5" fill="#8b9bb4">状态：先 Prefill 再 Decode 调度</text>
 
-      <text x="578" y="382" font-size="10" fill="#5b9fff" font-weight="600">▪ Quantization</text>
-      <text x="655" y="382" font-size="9.5" fill="#8b9bb4">(FP8/INT4 算子与 KV)</text>
+        <!-- Worker 框体 -->
+        <rect x="565" y="312" width="245" height="155" rx="10"
+              fill="#0f1a2c" stroke="#5b9fff" stroke-width="1.5"/>
+        <text x="687" y="334" font-size="12.5" font-weight="700"
+              fill="#e8eef7" text-anchor="middle">Worker (TpWorker/Runner)</text>
+        <line x1="575" y1="342" x2="800" y2="342" stroke="#3b6eb5" stroke-width="1"/>
 
-      <text x="578" y="404" font-size="10" fill="#5b9fff" font-weight="600">▪ Tensor Parallelism</text>
-      <text x="688" y="404" font-size="9.5" fill="#8b9bb4">(多卡 SPMD 通信)</text>
+        <text x="578" y="360" font-size="10" fill="#5b9fff" font-weight="600">▪ Attention Backend</text>
+        <text x="682" y="360" font-size="9.5" fill="#8b9bb4">(FlashInfer/Paged...)</text>
 
-      <text x="578" y="426" font-size="9.5" fill="#8b9bb4">前向计算 + Sampling 采样</text>
+        <text x="578" y="382" font-size="10" fill="#5b9fff" font-weight="600">▪ Quantization</text>
+        <text x="655" y="382" font-size="9.5" fill="#8b9bb4">(FP8/INT4 算子与 KV)</text>
+
+        <text x="578" y="404" font-size="10" fill="#5b9fff" font-weight="600">▪ Tensor Parallelism</text>
+        <text x="688" y="404" font-size="9.5" fill="#8b9bb4">(多卡 SPMD 通信)</text>
+
+        <text x="578" y="426" font-size="9.5" fill="#8b9bb4">前向计算 + Sampling 采样</text>
+      </g>
 
       <!-- ④ 数据：Scheduler → Worker -->
-      <line x1="450" y1="352" x2="563" y2="352"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <rect x="456" y="332" width="102" height="18" rx="4" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
-      <text x="507" y="345" font-size="9" fill="#5b9fff" font-weight="600" text-anchor="middle">④ batch (Chunked Prefill)</text>
+      <g class="rv" data-step="4">
+        <line x1="450" y1="352" x2="563" y2="352"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <rect x="456" y="332" width="102" height="18" rx="4" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
+        <text x="507" y="345" font-size="9" fill="#5b9fff" font-weight="600" text-anchor="middle">④ batch (Chunked Prefill)</text>
+      </g>
 
       <!-- ⑤ 数据：新 token 回 Scheduler -->
-      <line x1="565" y1="412" x2="452" y2="412"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <rect x="462" y="420" width="92" height="16" rx="3" fill="#12304a"/>
-      <text x="508" y="432" font-size="9.5" fill="#5b9fff" text-anchor="middle">⑤ next_token</text>
+      <g class="rv" data-step="5">
+        <line class="loop-arrow" x1="565" y1="412" x2="452" y2="412"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <rect x="462" y="420" width="92" height="16" rx="3" fill="#12304a"/>
+        <text x="508" y="432" font-size="9.5" fill="#5b9fff" text-anchor="middle">⑤ next_token</text>
+      </g>
 
-      <!-- 阶段③ Detokenizer -->
-      <rect x="148" y="525" width="775" height="95" rx="12"
-            fill="#123528" stroke="#15803d" stroke-dasharray="4 3"/>
-      <text x="162" y="545" font-size="12" font-weight="600" fill="#3ecf8e">
-        阶段③ Detokenizer 进程
-      </text>
+      <!-- 阶段③ Detokenizer（步 0 就在） -->
+      <g class="rv" data-step="0">
+        <rect x="148" y="525" width="775" height="95" rx="12"
+              fill="#123528" stroke="#15803d" stroke-dasharray="4 3"/>
+        <text x="162" y="545" font-size="12" font-weight="600" fill="#3ecf8e">
+          阶段③ Detokenizer 进程
+        </text>
 
-      <rect x="565" y="548" width="245" height="52" rx="10"
-            fill="#0f1a2c" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="687" y="570" font-size="12.5" font-weight="600"
-            fill="#e8eef7" text-anchor="middle">DetokenizerManager</text>
-      <text x="687" y="588" font-size="10.5"
-            fill="#8b9bb4" text-anchor="middle">token → 文本片段</text>
+        <rect x="565" y="548" width="245" height="52" rx="10"
+              fill="#0f1a2c" stroke="#bc8cff" stroke-width="1.5"/>
+        <text x="687" y="570" font-size="12.5" font-weight="600"
+              fill="#e8eef7" text-anchor="middle">DetokenizerManager</text>
+        <text x="687" y="588" font-size="10.5"
+              fill="#8b9bb4" text-anchor="middle">token → 文本片段</text>
+      </g>
 
       <!-- ① 数据：Client → HTTP -->
-      <line x1="132" y1="120" x2="178" y2="120"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <rect x="135" y="104" width="42" height="15" rx="3" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
-      <text x="156" y="115" font-size="9.5" font-weight="600" fill="#5b9fff" text-anchor="middle">① 文本</text>
+      <g class="rv" data-step="1">
+        <line x1="132" y1="120" x2="178" y2="120"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <rect x="135" y="104" width="42" height="15" rx="3" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
+        <text x="156" y="115" font-size="9.5" font-weight="600" fill="#5b9fff" text-anchor="middle">① 文本</text>
+      </g>
 
       <!-- ⑨ 数据：流式文本回 Client -->
-      <line x1="180" y1="148" x2="134" y2="148"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <rect x="122" y="156" width="72" height="15" rx="3" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
-      <text x="158" y="167" font-size="9" font-weight="600" fill="#5b9fff" text-anchor="middle">⑨ 文本/[DONE]</text>
+      <g class="rv" data-step="8">
+        <line x1="180" y1="148" x2="134" y2="148"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <rect x="122" y="156" width="72" height="15" rx="3" fill="#12304a" stroke="#3b6eb5" stroke-width="0.8"/>
+        <text x="158" y="167" font-size="9" font-weight="600" fill="#5b9fff" text-anchor="middle">⑨ 文本/[DONE]</text>
+      </g>
 
       <!-- ② 数据：HTTP → Tokenizer -->
-      <line x1="390" y1="128" x2="558" y2="128"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <rect x="438" y="112" width="72" height="16" rx="3" fill="#12304a"/>
-      <text x="474" y="124" font-size="10" fill="#5b9fff" text-anchor="middle">② input_ids</text>
+      <g class="rv" data-step="2">
+        <line x1="390" y1="128" x2="558" y2="128"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <rect x="438" y="112" width="72" height="16" rx="3" fill="#12304a"/>
+        <text x="474" y="124" font-size="10" fill="#5b9fff" text-anchor="middle">② input_ids</text>
+      </g>
 
       <!-- ⑧ 控制：更新/唤醒 -->
-      <line x1="560" y1="150" x2="392" y2="150"
-            stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
-      <rect x="410" y="158" width="92" height="16" rx="3" fill="#3a2a12"/>
-      <text x="456" y="170" font-size="10" fill="#e8a317" text-anchor="middle">⑧ 更新/唤醒</text>
+      <g class="rv" data-step="12">
+        <line x1="560" y1="150" x2="392" y2="150"
+              stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
+        <rect x="410" y="158" width="92" height="16" rx="3" fill="#3a2a12"/>
+        <text x="456" y="170" font-size="10" fill="#e8a317" text-anchor="middle">⑧ 更新/唤醒</text>
+      </g>
 
-      <!-- ③ 并行路径 & 对齐卡片 UserMsg -->
-      <path d="M655 160 L655 217 L318 217 L318 312"
-            fill="none" stroke="#5b9fff" stroke-width="2.2"
-            marker-end="url(#ah-data)"/>
-      <path d="M691 160 L691 230 L354 230 L354 312"
-            fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
-            marker-end="url(#ah-ctrl)"/>
+      <!-- ③ 并行路径：数据蓝线先描，控制橙虚线后叠 -->
+      <g class="rv" data-step="3">
+        <path d="M655 160 L655 217 L318 217 L318 312"
+              fill="none" stroke="#5b9fff" stroke-width="2.2"
+              marker-end="url(#ah-data)"/>
+      </g>
+      <g class="rv" data-step="9">
+        <path d="M691 160 L691 230 L354 230 L354 312"
+              fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
+              marker-end="url(#ah-ctrl)"/>
+        <rect x="360" y="268" width="104" height="15" rx="3" fill="#3a2a12"/>
+        <text x="412" y="279" font-size="9.5" font-weight="600" fill="#e8a317" text-anchor="middle">③ 控制：入队 / 参数</text>
+      </g>
+
+      <!-- 取消：红虚线从 HTTP Server 左下沿左侧空档下到 Scheduler，最后才画；画在阶段②标题之前，让标题压在线上 -->
+      <g class="rv" data-step="16">
+        <path d="M190 160 L190 440 L213 440"
+              fill="none" stroke="#f87171" stroke-width="2.6" stroke-dasharray="6 4"
+              marker-end="url(#ah-abort)"/>
+        <rect x="196" y="168" width="214" height="17" rx="3" fill="#2a1414" stroke="#7f1d1d" stroke-width="0.8"/>
+        <text x="303" y="180" font-size="10" font-weight="600" fill="#f87171" text-anchor="middle">用户断开 → 主进程发 AbortMsg</text>
+        <rect x="222" y="432" width="118" height="16" rx="3" fill="#2a1414" stroke="#7f1d1d" stroke-width="0.8"/>
+        <text x="281" y="444" font-size="9.5" font-weight="600" fill="#f87171" text-anchor="middle">Scheduler 停算 · 释放 KV</text>
+      </g>
 
       <!-- 阶段② 短标题：画在③线之后，垫底避开交叉 -->
-      <rect x="156" y="246" width="128" height="20" rx="3" fill="#3a2a12"/>
-      <text x="162" y="260" font-size="12" font-weight="600" fill="#e8a317">
-        阶段② 调度与 Worker
-      </text>
-      
-      <!-- ③ UserMsg 聚合卡片 -->
-      <rect x="410" y="172" width="156" height="80" rx="8"
-            fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
-      <text x="488" y="188" font-size="11" font-weight="700"
-            fill="#e8eef7" text-anchor="middle">③ UserMsg</text>
-      <text x="488" y="201" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
+      <g class="rv" data-step="0">
+        <rect x="156" y="246" width="128" height="20" rx="3" fill="#3a2a12"/>
+        <text x="162" y="260" font-size="12" font-weight="600" fill="#e8a317">
+          阶段② 调度与 Worker
+        </text>
+      </g>
 
-      <rect x="418" y="208" width="140" height="18" rx="4"
-            fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
-      <text x="488" y="221" font-size="9.5" font-weight="600"
-            fill="#5b9fff" text-anchor="middle">payload：input_ids</text>
+      <!-- ③ UserMsg 聚合卡片：payload 先出现，控制行随后 -->
+      <g class="rv" data-step="13">
+        <rect x="410" y="172" width="156" height="80" rx="8"
+              fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
+        <text x="488" y="188" font-size="11" font-weight="700"
+              fill="#e8eef7" text-anchor="middle">③ UserMsg</text>
+        <text x="488" y="201" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
 
-      <rect x="418" y="230" width="140" height="18" rx="4"
-            fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
-      <text x="488" y="243" font-size="9.5" font-weight="600"
-            fill="#e8a317" text-anchor="middle">控制：调度入队 / 参数</text>
+        <g class="row">
+          <rect x="418" y="208" width="140" height="18" rx="4"
+                fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
+          <text x="488" y="221" font-size="9.5" font-weight="600"
+                fill="#5b9fff" text-anchor="middle">payload：input_ids</text>
+        </g>
+        <g class="row ctrl-row">
+          <rect x="418" y="230" width="140" height="18" rx="4"
+                fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
+          <text x="488" y="243" font-size="9.5" font-weight="600"
+                fill="#e8a317" text-anchor="middle">控制：调度入队 / 参数</text>
+        </g>
+      </g>
 
-      <!-- ⑥ 并行路径 & 对齐卡片 DetokenizeMsg -->
-      <path d="M318 467 L318 560 L563 560"
-            fill="none" stroke="#5b9fff" stroke-width="2.2"
-            marker-end="url(#ah-data)"/>
-      <path d="M354 467 L354 585 L563 585"
-            fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
-            marker-end="url(#ah-ctrl)"/>
+      <!-- ⑥ 并行路径 -->
+      <g class="rv" data-step="6">
+        <path d="M318 467 L318 560 L563 560"
+              fill="none" stroke="#5b9fff" stroke-width="2.2"
+              marker-end="url(#ah-data)"/>
+      </g>
+      <g class="rv" data-step="10">
+        <path d="M354 467 L354 585 L563 585"
+              fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
+              marker-end="url(#ah-ctrl)"/>
+        <rect x="360" y="494" width="96" height="15" rx="3" fill="#3a2a12"/>
+        <text x="408" y="505" font-size="9.5" font-weight="600" fill="#e8a317" text-anchor="middle">⑥ 控制：请求标识</text>
+      </g>
 
       <!-- ⑥ DetokenizeMsg 聚合卡片 -->
-      <rect x="370" y="520" width="156" height="80" rx="8"
-            fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
-      <text x="448" y="536" font-size="11" font-weight="700"
-            fill="#e8eef7" text-anchor="middle">⑥ DetokenizeMsg</text>
-      <text x="448" y="549" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
+      <g class="rv" data-step="14">
+        <rect x="370" y="520" width="156" height="80" rx="8"
+              fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
+        <text x="448" y="536" font-size="11" font-weight="700"
+              fill="#e8eef7" text-anchor="middle">⑥ DetokenizeMsg</text>
+        <text x="448" y="549" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
 
-      <rect x="378" y="555" width="140" height="18" rx="4"
-            fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
-      <text x="448" y="568" font-size="9.5" font-weight="600"
-            fill="#5b9fff" text-anchor="middle">payload：token_ids</text>
+        <g class="row">
+          <rect x="378" y="555" width="140" height="18" rx="4"
+                fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
+          <text x="448" y="568" font-size="9.5" font-weight="600"
+                fill="#5b9fff" text-anchor="middle">payload：token_ids</text>
+        </g>
+        <g class="row ctrl-row">
+          <rect x="378" y="577" width="140" height="18" rx="4"
+                fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
+          <text x="448" y="590" font-size="9.5" font-weight="600"
+                fill="#e8a317" text-anchor="middle">控制：触发解码 / 请求标识</text>
+        </g>
+      </g>
 
-      <rect x="378" y="577" width="140" height="18" rx="4"
-            fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
-      <text x="448" y="590" font-size="9.5" font-weight="600"
-            fill="#e8a317" text-anchor="middle">控制：触发解码 / 请求标识</text>
+      <!-- ⑦ 并行路径 -->
+      <g class="rv" data-step="7">
+        <path d="M810 560 L952 560 L952 126 L792 126"
+              fill="none" stroke="#5b9fff" stroke-width="2.2"
+              marker-end="url(#ah-data)"/>
+      </g>
+      <g class="rv" data-step="11">
+        <path d="M810 585 L988 585 L988 146 L792 146"
+              fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
+              marker-end="url(#ah-ctrl)"/>
+        <rect x="826" y="592" width="96" height="15" rx="3" fill="#3a2a12"/>
+        <text x="874" y="603" font-size="9.5" font-weight="600" fill="#e8a317" text-anchor="middle">⑦ 控制：finished</text>
+      </g>
 
-      <!-- ⑦ 并行路径 & 对齐卡片 UserReply -->
-      <path d="M810 560 L952 560 L952 126 L792 126"
-            fill="none" stroke="#5b9fff" stroke-width="2.2"
-            marker-end="url(#ah-data)"/>
-      <path d="M810 585 L988 585 L988 146 L792 146"
-            fill="none" stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4"
-            marker-end="url(#ah-ctrl)"/>
-      
       <!-- ⑦ UserReply 聚合卡片 -->
-      <rect x="882" y="272" width="140" height="138" rx="8"
-            fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
-      <text x="952" y="293" font-size="11" font-weight="700"
-            fill="#e8eef7" text-anchor="middle">⑦ UserReply</text>
-      <text x="952" y="309" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
+      <g class="rv" data-step="15">
+        <rect x="882" y="272" width="140" height="138" rx="8"
+              fill="#0f1a2c" fill-opacity="0.98" stroke="#2a3a52" stroke-width="1.2"/>
+        <text x="952" y="293" font-size="11" font-weight="700"
+              fill="#e8eef7" text-anchor="middle">⑦ UserReply</text>
+        <text x="952" y="309" font-size="9.5" fill="#8b9bb4" text-anchor="middle">一包消息 · ZMQ</text>
 
-      <rect x="890" y="318" width="124" height="24" rx="4"
-            fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
-      <text x="952" y="334" font-size="10" font-weight="600"
-            fill="#5b9fff" text-anchor="middle">payload：文本</text>
+        <g class="row">
+          <rect x="890" y="318" width="124" height="24" rx="4"
+                fill="#12304a" stroke="#3b6eb5" stroke-width="1"/>
+          <text x="952" y="334" font-size="10" font-weight="600"
+                fill="#5b9fff" text-anchor="middle">payload：文本</text>
+        </g>
+        <g class="row ctrl-row">
+          <rect x="890" y="348" width="124" height="50" rx="4"
+                fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
+          <text x="952" y="367" font-size="8.8" font-weight="600"
+                fill="#e8a317" text-anchor="middle">控制：请求 ID (Request ID)</text>
+          <text x="952" y="386" font-size="8.8" font-weight="600"
+                fill="#e8a317" text-anchor="middle">   finished 状态标记</text>
+        </g>
+      </g>
 
-      <rect x="890" y="348" width="124" height="50" rx="4"
-            fill="#3a2a12" stroke="#b45309" stroke-width="1"/>
-      <text x="952" y="367" font-size="8.8" font-weight="600"
-            fill="#e8a317" text-anchor="middle">控制：请求 ID (Request ID)</text>
-      <text x="952" y="386" font-size="8.8" font-weight="600"
-            fill="#e8a317" text-anchor="middle">   finished 状态标记</text>
 
-      <!-- 取消：控制路径 -->
-      <text x="162" y="198" font-size="10" fill="#e8a317">
-        取消（控制）：断开 → AbortMsg → 停算收回 KV
-      </text>
+      <!-- 图例底栏：框和色块先在，路径行按类别亮 -->
+      <g class="rv" data-step="0">
+        <rect x="148" y="650" width="850" height="120" rx="12"
+              fill="#0f1a2c" stroke="#2a3a52"/>
+        <text x="168" y="674" font-size="12" font-weight="600" fill="#e8eef7">图例</text>
 
-      <!-- 图例底栏 -->
-      <rect x="148" y="650" width="850" height="195" rx="12"
-            fill="#0f1a2c" stroke="#2a3a52"/>
-      <text x="168" y="674" font-size="12" font-weight="600" fill="#e8eef7">核心机制与图例索引</text>
+        <rect x="168" y="688" width="14" height="14" rx="3" fill="#12304a" stroke="#3b6eb5"/>
+        <text x="190" y="699" font-size="11" fill="#8b9bb4">主进程</text>
+        <rect x="280" y="688" width="14" height="14" rx="3" fill="#3a2a12" stroke="#b45309"/>
+        <text x="302" y="699" font-size="11" fill="#8b9bb4">Scheduler</text>
+        <rect x="420" y="688" width="14" height="14" rx="3" fill="#123528" stroke="#15803d"/>
+        <text x="442" y="699" font-size="11" fill="#8b9bb4">Detokenizer</text>
+      </g>
+      <g class="rv" data-step="5">
+        <rect x="560" y="688" width="14" height="14" rx="3" fill="#2a1f0e" stroke="#e8a317"/>
+        <text x="582" y="699" font-size="11" fill="#8b9bb4">Decode 循环</text>
+      </g>
 
-      <rect x="168" y="688" width="14" height="14" rx="3" fill="#12304a" stroke="#3b6eb5"/>
-      <text x="190" y="699" font-size="11" fill="#8b9bb4">主进程</text>
-      <rect x="280" y="688" width="14" height="14" rx="3" fill="#3a2a12" stroke="#b45309"/>
-      <text x="302" y="699" font-size="11" fill="#8b9bb4">Scheduler</text>
-      <rect x="420" y="688" width="14" height="14" rx="3" fill="#123528" stroke="#15803d"/>
-      <text x="442" y="699" font-size="11" fill="#8b9bb4">Detokenizer</text>
-      <rect x="560" y="688" width="14" height="14" rx="3" fill="#2a1f0e" stroke="#e8a317"/>
-      <text x="582" y="699" font-size="11" fill="#8b9bb4">Decode 循环</text>
+      <g class="rv" data-step="1">
+        <line x1="168" y1="724" x2="220" y2="724"
+              stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
+        <text x="230" y="728" font-size="11" fill="#8b9bb4">数据路径：①②③④⑤⑥⑦⑨（连续：文本 → ids → batch → token → 文本）</text>
+      </g>
 
-      <line x1="168" y1="724" x2="220" y2="724"
-            stroke="#5b9fff" stroke-width="2.2" marker-end="url(#ah-data)"/>
-      <text x="230" y="728" font-size="11" fill="#8b9bb4">数据路径：①②③④⑤⑥⑦⑨（连续：文本 → ids → batch → token → 文本）</text>
+      <g class="rv" data-step="9">
+        <line x1="168" y1="750" x2="220" y2="750"
+              stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
+        <text x="230" y="754" font-size="11" fill="#8b9bb4">控制路径：③⑥⑦⑧ 与 Abort（数据/状态同包：入队、解码、回程、唤醒、取消）</text>
+      </g>
 
-      <line x1="168" y1="750" x2="220" y2="750"
-            stroke="#e8a317" stroke-width="2.2" stroke-dasharray="6 4" marker-end="url(#ah-ctrl)"/>
-      <text x="230" y="754" font-size="11" fill="#8b9bb4">控制路径：③⑥⑦⑧ 与 Abort（数据/状态同包：入队、解码、回程、唤醒、取消）</text>
-
-      <text x="168" y="782" font-size="10.5" fill="#5b9fff" font-weight="600">
-        新增关键技术映射：
-      </text>
-      <text x="168" y="802" font-size="10.5" fill="#8b9bb4">
-        • Continuous Batching / RadixAttention / HiCache ➔ 位于阶段② Scheduler 调度引擎中
-      </text>
-      <text x="168" y="822" font-size="10.5" fill="#8b9bb4">
-        • Chunked Prefill ➔ 位于 ④ batch 组包通道 ｜ Worker / Attention Backend / Quantization ➔ 位于 Worker 算子引擎中
-      </text>
-      <text x="168" y="837" font-size="10.5" fill="#3ecf8e" font-weight="600">
-        • PD Disaggregation ➔ 支持将阶段② 拆分为独立的 Prefill 节点与 Decode 节点并经由 RDMA 传输 KV
-      </text>
     </svg>
     </div>
     <p class="links">
       相关页：
       <a href="index.html">总览</a> ·
-      <a href="request-flow1.html">基础请求流</a> ·
-      <a href="request-flow2.html">request-flow2</a> ·
+      <a href="archive/request-flow2.html">旧版 request-flow2</a> ·
       <a href="journey.html">全链路（集群）</a> ·
       <a href="parallel.html">并行 TP/DP/EP</a> ·
       <a href="batching.html">连续批</a>
     </p>
-    <p class="foot">许可 CC BY-NC-SA 4.0 · 拓扑基于你提供的缩短标题版；可放入 llm-engine-viz 根目录作 request-flow3.html</p>
+    <p class="foot">许可 CC BY-NC-SA 4.0 · 用「上一步 / 下一步」或键盘 ← → 步进：先只有三个框，再按 ①→⑨ 画数据线，控制线按 ③⑥⑦⑧ 依次叠在同一条边上，最后是取消。</p>
   </div>
+  <script src="nav.js"></script>
+  <script>
+    (function () {
+      // 步进脚本：每步一句话。先只有三个框，数据蓝线 ①②③④⑤⑥⑦⑨，再控制橙虚线，再 ZMQ 包，最后取消。
+      var CAPS = [
+        "一条请求要穿过三个进程：主进程收、Scheduler 算、Detokenizer 译。现在只画了三个框，线一条都还没有。<span class='hint'>按「下一步」或 → 开始</span>",
+        "<b>①</b> Client 把文本交给 HTTP Server / Engine（/v1/chat/completions）。数据路径从这里开始，蓝实线。",
+        "<b>②</b> TokenizerManager 套模板、切成 input_ids，并建一个 ReqState 记住这条请求——回程时靠它找人。",
+        "<b>③</b> input_ids 经 ZMQ 发给 Scheduler 进程。先只看数据这一半；同一条边上的控制信息稍后再叠。",
+        "<b>④</b> Scheduler 把多条请求组成一个 batch（Chunked Prefill）交给 Worker 做前向。",
+        "<b>⑤</b> Worker 采样出 next_token 回到 Scheduler。<b>未完成则下一轮</b>：Scheduler 自己再转一圈，不需要新路径，所以框在闪。",
+        "<b>⑥</b> 每一轮产出的 token_ids 发给 Detokenizer 进程，不等整条生成完。",
+        "<b>⑦</b> Detokenizer 译成文本片段，经「回程走廊」送回 TokenizerManager。",
+        "<b>⑨</b> TokenizerManager 按 ReqState 找到等待方，把文本流式写回 Client；结束时发 [DONE]。数据路径到此走完一圈。",
+        "<b>控制路径</b>叠在同一条边上，也按顺序看。先是 <b>③</b>：和 input_ids 同一包里还带着调度参数（入队、采样参数），Scheduler 收到才知道怎么排。橙虚线 = 控制。",
+        "<b>⑥ 的控制</b>：token_ids 旁边带着请求标识，Detokenizer 才知道这几个 token 属于哪条请求。",
+        "<b>⑦ 的控制</b>：文本旁边带着 Request ID 和 finished 标记，主进程据此决定什么时候关流。",
+        "<b>⑧</b> ⑦ 到达后，TokenizerManager 更新 ReqState 并唤醒等待的协程——这是一条纯控制消息，没有模型数据。",
+        "<b>ZMQ 包长什么样</b>：③ UserMsg = payload（input_ids）先装，再贴控制字段（调度入队 / 参数）。",
+        "<b>⑥ DetokenizeMsg</b> = payload（token_ids）+ 控制（触发解码 / 请求标识）。同一个包，两种内容。",
+        "<b>⑦ UserReply</b> = payload（文本）+ 控制（Request ID、finished）。finished 决定主进程何时关流。",
+        "<b>取消</b>：用户断开连接后，主进程给 Scheduler 发一条 AbortMsg（红虚线）。Scheduler 收到后停止这条请求的计算，释放它占的 KV 显存。"
+      ];
+      var LAST = CAPS.length - 1;          // 16
+      var ABORT_STEP = 16, LOOP_STEP = 5;
+      var groups = Array.prototype.slice.call(document.querySelectorAll("#flow .rv"));
+      var legendSpans = Array.prototype.slice.call(document.querySelectorAll(".legend span[data-step]"));
+      var cap = document.getElementById("cap"), pos = document.getElementById("pos"), dots = document.getElementById("dots");
+      var btnPrev = document.getElementById("btnPrev"), btnNext = document.getElementById("btnNext");
+      var btnPlay = document.getElementById("btnPlay"), btnReset = document.getElementById("btnReset");
+      var sched = document.getElementById("schedBox");
+      var step = 0, timer = null;
+
+      for (var i = 0; i <= LAST; i++) {
+        var d = document.createElement("i");
+        d.dataset.i = i; d.title = "第 " + i + " 步";
+        if (i === ABORT_STEP) d.className = "abort";
+        d.addEventListener("click", function () { go(+this.dataset.i); });
+        dots.appendChild(d);
+      }
+
+      function render() {
+        groups.forEach(function (g) {
+          var s = +g.dataset.step;
+          g.classList.toggle("on", s <= step);
+          g.classList.toggle("now", s === step);
+        });
+        legendSpans.forEach(function (sp) { sp.classList.toggle("on", +sp.dataset.step <= step); });
+        sched.classList.toggle("pulse", step === LOOP_STEP);
+        document.getElementById("flow").classList.toggle("abort-focus", step === ABORT_STEP);
+        cap.innerHTML = CAPS[step];
+        pos.textContent = step === 0 ? "起点 · 0 / " + LAST : "第 " + step + " / " + LAST + " 步";
+        Array.prototype.forEach.call(dots.children, function (d, i) {
+          d.classList.toggle("done", i < step);
+          d.classList.toggle("cur", i === step);
+        });
+        btnPrev.disabled = step === 0;
+        btnNext.disabled = step === LAST;
+        if (step === LAST && timer) stopPlay();
+      }
+      function go(n) { step = Math.max(0, Math.min(LAST, n)); render(); }
+      function next() { go(step + 1); }
+      function prev() { go(step - 1); }
+      function stopPlay() { clearInterval(timer); timer = null; btnPlay.classList.remove("on"); btnPlay.textContent = "▶ 自动播放"; }
+      function startPlay() {
+        if (step === LAST) go(0);
+        timer = setInterval(function () { if (step >= LAST) { stopPlay(); return; } next(); }, 1700);
+        btnPlay.classList.add("on"); btnPlay.textContent = "❚❚ 暂停";
+      }
+
+      btnNext.addEventListener("click", function () { stopPlay(); next(); });
+      btnPrev.addEventListener("click", function () { stopPlay(); prev(); });
+      btnReset.addEventListener("click", function () { stopPlay(); go(0); });
+      btnPlay.addEventListener("click", function () { timer ? stopPlay() : startPlay(); });
+      document.addEventListener("keydown", function (e) {
+        if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+        if (e.key === "ArrowRight") { e.preventDefault(); stopPlay(); next(); }
+        else if (e.key === "ArrowLeft") { e.preventDefault(); stopPlay(); prev(); }
+        else if (e.key === " ") { e.preventDefault(); timer ? stopPlay() : startPlay(); }
+      });
+      render();
+    })();
+  </script>
 </body>
 </html>
