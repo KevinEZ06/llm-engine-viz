@@ -26,6 +26,8 @@
         @keyframes popInFaint { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; } }
         @keyframes popInSolid { 0% { transform: translate(-50%, -50%) scale(0.9); opacity: 0.6; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
         @keyframes popInScale { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+        /* 文档流里的块用这个：只淡入，不带 translate */
+        @keyframes fadeInFlow { 0% { opacity: 0; transform: translateY(4px); } 100% { opacity: 1; transform: none; } }
         @keyframes saveToCache {
             0% { transform: translate(-50%, -50%) scale(1); box-shadow: 0 0 0 rgba(16, 185, 129, 0); border-color: #a78bfa; }
             50% { transform: translate(-50%, -50%) scale(1.05); box-shadow: 0 0 30px rgba(16, 185, 129, 0.8); border-color: #34d399; background-color: rgba(6, 78, 59, 0.8); }
@@ -101,17 +103,6 @@
             });
         });
 
-        const TARGET_PREDICTIONS = [
-            { sourceId: 'n1', target: 'for', prob: 0.98 },
-            { sourceId: 'n2', target: 'with', prob: 0.40 }, 
-            { sourceId: 'n3', target: 'fast', prob: 0.12 }, 
-            { sourceId: 'n4', target: 'LLMs', prob: 0.99 },
-            { sourceId: 'n5', target: 'memory', prob: 0.25 },
-            { sourceId: 'n6', target: 'engine', prob: 0.05 },
-            { sourceId: 'n7', target: '.', prob: 0.85 },
-            { sourceId: 'n8', target: 'systems', prob: 0.01 },
-        ];
-        
         const getCandidatesData = (nodeId) => {
             const data = {
                 'root': [
@@ -141,6 +132,115 @@
             ];
         };
 
+        // ---- 验证：目标模型在每个位置的分布（按场景切换）。draft q 来自 getCandidatesData ----
+        const BASE_DISTS = {
+            root: { designed: 0.62, built: 0.25, a: 0.08, the: 0.05 },
+            n1: { for: 0.80, to: 0.12, as: 0.08 },
+            n2: { with: 0.40, by: 0.30, on: 0.30 },
+            n3: { new: 0.60, fast: 0.25, the: 0.15 },
+            n4: { LLMs: 0.90, AI: 0.06, you: 0.04 },
+            n5: { memory: 0.50, in: 0.30, GPUs: 0.20 },
+            n6: { serving: 0.70, engine: 0.20, apps: 0.10 },
+            n7: { '.': 0.85, and: 0.15 },
+            n8: { systems: 0.60, '.': 0.40 }
+        };
+        const SCENARIOS = [
+            { name: '全猜对', dists: BASE_DISTS },
+            { name: '第 1 个词猜错', dists: { ...BASE_DISTS,
+                root: { built: 0.55, designed: 0.35, a: 0.10 },
+                n2: { with: 0.70, by: 0.20, on: 0.10 },
+                n5: { memory: 0.60, in: 0.30, GPUs: 0.10 } } },
+            { name: '第 2 个词猜错', dists: { ...BASE_DISTS,
+                root: { designed: 0.60, built: 0.30, a: 0.10 },
+                n1: { to: 0.55, for: 0.35, as: 0.10 } } },
+            { name: '第 1 个词全猜错', dists: { ...BASE_DISTS,
+                root: { the: 0.50, designed: 0.25, built: 0.15, a: 0.10 } } }
+        ];
+
+        // 固定种子的小 PRNG：同一场景 + 同一策略，每次步进结果一致
+        const mulberry32 = (seed) => () => {
+            seed = (seed + 0x6D2B79F5) | 0;
+            let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+        const argmaxOf = (dist) => Object.keys(dist).reduce((best, t) => (best === null || dist[t] > dist[best]) ? t : best, null);
+        const sampleFrom = (dist, rng) => {
+            const total = Object.values(dist).reduce((sum, v) => sum + v, 0) || 1;
+            let r = rng() * total;
+            for (const t of Object.keys(dist)) { r -= dist[t]; if (r <= 0) return t; }
+            return argmaxOf(dist);
+        };
+        // 全拒之后的补抽分布：目标分布 p 去掉被拒的候选词，再归一化
+        // （对应 SGLang 内核里 relu(target_probs − draft_probs)，被拒词的 draft_probs 被写成了它的 target_probs）
+        const withoutTokens = (p, tokens) => {
+            const out = {};
+            Object.keys(p).forEach(t => { if (!tokens.includes(t) && p[t] > 0) out[t] = p[t]; });
+            const total = Object.values(out).reduce((sum, v) => sum + v, 0);
+            if (total <= 0) return { ...p };
+            Object.keys(out).forEach(t => { out[t] = out[t] / total; });
+            return out;
+        };
+        const draftDistOf = (nodeId) => { const d = {}; getCandidatesData(nodeId).forEach(c => { d[c.t] = c.p; }); return d; };
+        const fmt = (v) => (v === undefined || v === null || Number.isNaN(v)) ? '—' : (Math.round(v * 100) / 100).toFixed(2);
+
+        // 沿树核对。贪心：子节点等于 target argmax 才收，首个不等处停。
+        // 采样：每层一枚随机数，按顺序累加候选的目标概率 p，落进区间即接受；全拒则从去掉被拒候选的 p 里抽（SGLang target-only 内核）。
+        // 走到叶子时大模型顺手多给一个（附赠）。因此本轮提交数 = 接受的 draft 数 + 1。
+        const verifyTree = (strategy, scenarioIdx) => {
+            const scenario = SCENARIOS[scenarioIdx];
+            const rng = mulberry32(scenarioIdx * 7919 + 17);
+            const verdicts = {};
+            const path = [];
+            let cur = 'root';
+            let final = null;
+            for (let guard = 0; guard < 10; guard++) {
+                const kids = VALID_NODES.filter(n => n.parent === cur);
+                let p = { ...(scenario.dists[cur] || {}) };
+                let accepted = null;
+                if (kids.length === 0) {
+                    const token = strategy === 'greedy' ? argmaxOf(p) : sampleFrom(p, rng);
+                    final = { token, kind: 'bonus', at: cur, p: p[token] };
+                    break;
+                }
+                if (strategy === 'greedy') {
+                    const top = argmaxOf(p);
+                    kids.forEach(kid => {
+                        const pt = p[kid.text] || 0;
+                        if (!accepted && kid.text === top) { accepted = kid; verdicts[kid.id] = { decision: 'accept', q: kid.prob, p: pt, top }; }
+                        else verdicts[kid.id] = { decision: 'reject', q: kid.prob, p: pt, top };
+                    });
+                    if (!accepted) final = { token: top, kind: 'correct', at: cur, p: p[top] };
+                } else {
+                    // SGLang 默认验证（tree_speculative_sampling_target_only）：
+                    // 这一层只抛一枚随机数 coin，按顺序累加各候选在大模型里的概率 p，
+                    // coin 落进谁的区间就收谁；都没落进就全拒。draft 的 q 不参与判定。
+                    const coin = rng();
+                    let acc = 0;
+                    const rejected = [];
+                    for (const kid of kids) {
+                        const pt = p[kid.text] || 0;
+                        const lo = acc; acc += pt;
+                        if (pt > 0 && coin < acc) { accepted = kid; verdicts[kid.id] = { decision: 'accept', q: kid.prob, p: pt, coin, lo, hi: acc }; break; }
+                        verdicts[kid.id] = { decision: 'reject', q: kid.prob, p: pt, coin, lo, hi: acc };
+                        rejected.push(kid.text);
+                    }
+                    if (!accepted) {
+                        const rest = withoutTokens(p, rejected);
+                        const token = sampleFrom(rest, rng);
+                        final = { token, kind: 'correct', at: cur, p: p[token], coin, acc };
+                    }
+                }
+                if (!accepted) break;
+                path.push(accepted.id);
+                cur = accepted.id;
+            }
+            VALID_NODES.forEach(n => {
+                if (!verdicts[n.id]) verdicts[n.id] = { decision: 'skip', q: n.prob, p: (scenario.dists[n.parent] || {})[n.text] || 0 };
+            });
+            return { path, verdicts, final, total: path.length + 1, lastId: cur };
+        };
+
         function EagleSpeculativeSimulator() {
             // 核心重构：将原本的 useEffect 定时器彻底移除，构建线性的微步骤状态机
             const STATES = useMemo(() => {
@@ -166,14 +266,21 @@
                 
                 // 第 31 步：等待对齐校验
                 s.push({ phase: 4, treeDepth: 3, algoStage: 6, activeRow: -1 });
-                // 第 32 步：完成并接收结果
+                // 第 32 步：完成并接收结果（路径 + 纠正/附赠槽）
                 s.push({ phase: 5, treeDepth: 3, algoStage: 6, activeRow: -1 });
+                // 第 33 步：路径确定后才显示数字
+                s.push({ phase: 6, treeDepth: 3, algoStage: 6, activeRow: -1 });
                 
                 return s;
             }, []);
 
             const [stepIndex, setStepIndex] = useState(0);
             const [isPlaying, setIsPlaying] = useState(false);
+            const [strategy, setStrategy] = useState('greedy');
+            const [scenarioIdx, setScenarioIdx] = useState(0);
+            const verdict = useMemo(() => verifyTree(strategy, scenarioIdx), [strategy, scenarioIdx]);
+            // 每个场景在两种策略下各收几个，标在场景按钮上
+            const scenarioTotals = useMemo(() => SCENARIOS.map((_, i) => ({ greedy: verifyTree('greedy', i).total, sample: verifyTree('sample', i).total })), []);
 
             useEffect(() => {
                 if (!isPlaying) return;
@@ -191,8 +298,13 @@
             const activeMaskKeys = activeMaskNode ? TREE_MASK[activeRow]
                 .map((value, index) => value === 1 ? VALID_NODES[index] : null)
                 .filter(Boolean) : [];
-            const activePrediction = activeMaskNode ? TARGET_PREDICTIONS.find(pred => pred.sourceId === activeMaskNode.id) : null;
-            const activeMaskAccepted = activeMaskNode && ['n1', 'n4', 'n7'].includes(activeMaskNode.id);
+            const activeMaskVerdict = activeMaskNode ? verdict.verdicts[activeMaskNode.id] : null;
+            const activeTargetDist = activeMaskNode ? (SCENARIOS[scenarioIdx].dists[activeMaskNode.parent] || {}) : {};
+
+            // 纠正 / 附赠槽在树上的落点：最后一个接受节点之后。若该位置已有被拒的 draft，叠在它右下角；否则放在空位上
+            const lastAcceptedNode = verdict.lastId === 'root' ? ROOT_NODE : ALL_DRAFT_NODES.find(n => n.id === verdict.lastId);
+            const slotKid = VALID_NODES.find(n => n.parent === verdict.lastId);
+            const corrPos = slotKid ? { x: slotKid.x + 40, y: slotKid.y + 36 } : { x: lastAcceptedNode.x + 210, y: lastAcceptedNode.y };
 
             const batchCenterX = phase === 1 
                 ? (treeDepth === 1 ? 260 : treeDepth === 2 ? 430 : 640)
@@ -242,7 +354,10 @@
             };
 
             const renderTreeEdges = () => {
-                return ALL_DRAFT_NODES.map((node) => {
+                const corrEdge = (phase >= 5 && verdict.final) ? (
+                    <path key="edge-correction" d={`M ${lastAcceptedNode.x + (verdict.lastId === 'root' ? 60 : 65)} ${lastAcceptedNode.y} C ${lastAcceptedNode.x + 120} ${lastAcceptedNode.y}, ${corrPos.x - 110} ${corrPos.y}, ${corrPos.x - 58} ${corrPos.y}`} fill="none" stroke="#fb923c" strokeWidth="3" strokeDasharray="6,5" className="animate-[popInSolid_0.5s_forwards]" />
+                ) : null;
+                return [corrEdge].concat(ALL_DRAFT_NODES.map((node) => {
                     if (phase === 1) {
                         if (node.depth > treeDepth) return null;
                         if (node.depth === treeDepth && algoStage < 4) return null; 
@@ -251,8 +366,10 @@
                     const parentNode = isRootParent ? ROOT_NODE : ALL_DRAFT_NODES.find(n => n.id === node.parent);
                     if (!parentNode) return null;
 
-                    const isRejected = phase === 5 && !['n1', 'n4', 'n7'].includes(node.id);
-                    const isAccepted = phase === 5 && !isRejected;
+                    const nv = verdict.verdicts[node.id];
+                    const isAccepted = phase >= 5 && !node.isDummy && nv.decision === 'accept';
+                    const isRejected = phase >= 5 && !node.isDummy && nv.decision === 'reject';
+                    const isSkipped = phase >= 5 && !node.isDummy && nv.decision === 'skip';
                     let strokeColor = '#475569';
                     let strokeDash = 'none';
                     let lineClasses = "transition-all duration-1000";
@@ -272,8 +389,9 @@
                         if (node.isDummy) {
                             strokeColor = 'rgba(239, 68, 68, 0.2)'; strokeDash = '4,4';
                         } else {
-                            if (isAccepted) strokeColor = '#10b981';
-                            if (isRejected && phase === 5) { strokeColor = '#ef4444'; strokeDash = '5,5'; lineClasses += ' animate-[fadeOut_2s_forwards]'; }
+                            if (isAccepted) strokeColor = '#f97316';
+                            if (isRejected) { strokeColor = '#ef4444'; strokeDash = '5,5'; }
+                            if (isSkipped) { strokeColor = '#334155'; strokeDash = '3,5'; }
                         }
                     }
                     
@@ -284,7 +402,7 @@
                     return (
                         <path key={`edge-${node.id}`} d={`M ${startX} ${parentNode.y} C ${startX + 50} ${parentNode.y}, ${endX - 50} ${node.y}, ${endX} ${node.y}`} fill="none" stroke={strokeColor} strokeWidth={strokeWidthValue} strokeDasharray={strokeDash} className={lineClasses} />
                     );
-                });
+                }));
             };
 
             const renderMicroActionPipeline = () => {
@@ -447,7 +565,7 @@
                                 <GitBranch className="w-6 h-6 text-violet-400" />1. Draft 树展开与 KV 更新
                             </h2>
                             <div className="flex-1 bg-slate-950/50 rounded-xl border border-slate-800/50 overflow-x-auto overflow-y-hidden min-h-[760px] custom-scrollbar">
-                                <div className="relative min-w-[820px] min-h-[760px] h-full">
+                                <div className="relative min-w-[1000px] min-h-[760px] h-full">
                                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
                                    {renderTreeEdges()}
                                </svg>
@@ -469,8 +587,10 @@
                                        (phase === 1 && treeDepth === node.depth && algoStage >= 5)
                                    );
 
-                                   const isAccepted = phase === 5 && ['n1', 'n4', 'n7'].includes(node.id);
-                                   const isRejected = phase === 5 && !isAccepted;
+                                   const nv = verdict.verdicts[node.id];
+                                   const isAccepted = phase >= 5 && !node.isDummy && nv.decision === 'accept';
+                                   const isRejected = phase >= 5 && !node.isDummy && nv.decision === 'reject';
+                                   const isSkipped = phase >= 5 && !node.isDummy && nv.decision === 'skip';
 
                                    let borderClass = 'border-slate-700 bg-slate-900/80';
                                    let animationClass = "animate-[popInFaint_0.4s_ease-out_forwards]";
@@ -481,11 +601,14 @@
                                            ? "animate-[shatter_1.5s_ease-in-out_forwards]" 
                                            : "opacity-30 transform translate-y-[60px] scale-50 filter grayscale"; 
                                    } else if (isAccepted) {
-                                       borderClass = 'border-emerald-500 bg-emerald-950/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-[saveToCache_1.5s_infinite]';
+                                       borderClass = 'border-orange-500 bg-orange-950/40 text-orange-200 shadow-[0_0_15px_rgba(249,115,22,0.35)]';
                                        animationClass = "";
                                    } else if (isRejected) {
-                                       borderClass = 'border-red-900 bg-slate-950/40 text-slate-600 opacity-20 line-through';
-                                       animationClass = "animate-[fadeOut_2s_forwards]";
+                                       borderClass = 'border-red-500/70 border-dashed bg-slate-950/60 text-slate-500 opacity-75';
+                                       animationClass = "";
+                                   } else if (isSkipped) {
+                                       borderClass = 'border-slate-700 border-dashed bg-slate-950/40 text-slate-600 opacity-40';
+                                       animationClass = "";
                                    } else if (phase > 1) {
                                        animationClass = "animate-[popInSolid_0.3s_forwards]";
                                    }
@@ -496,10 +619,21 @@
                                                <span>{node.id}</span>
                                                <span className={isPruned ? "text-red-400" : "text-amber-400/80"}>p={node.prob}</span>
                                            </div>
-                                           <div className="font-semibold text-slate-200 truncate text-base">{node.text}</div>
+                                           <div className={`font-semibold truncate text-base ${isRejected ? 'text-slate-500 line-through' : isAccepted ? 'text-white' : 'text-slate-200'}`}>{node.text}</div>
+                                           {phase >= 4 && !node.isDummy && (
+                                               <div className={`text-[10px] mt-1 font-mono ${isSkipped ? 'text-slate-700' : 'text-cyan-400/80'}`}>target p={fmt(nv.p)}</div>
+                                           )}
                                        </div>
                                    );
                                })}
+
+                               {phase >= 5 && verdict.final && (
+                                   <div className="absolute z-40 -translate-x-1/2 -translate-y-1/2 w-[116px] p-2 rounded-lg border-2 border-dashed border-orange-400 bg-orange-950/90 text-center font-mono shadow-[0_0_18px_rgba(251,146,60,0.35)] animate-[popInScale_0.4s_ease-out_forwards]" style={{ left: corrPos.x, top: corrPos.y }}>
+                                       <div className="text-[10px] text-orange-300 font-bold tracking-wider">{verdict.final.kind === 'bonus' ? '附赠' : '纠正'}</div>
+                                       <div className="text-base font-bold text-white">{verdict.final.token}</div>
+                                       <div className="text-[10px] text-cyan-300/80">p={fmt(verdict.final.p)}</div>
+                                   </div>
+                               )}
 
                                {renderMicroActionPipeline()}
                                 </div>
@@ -539,13 +673,44 @@
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-5 gap-1.5 text-[12px] font-mono text-center mt-1">
+                                <div className="flex flex-wrap items-center gap-2 text-[12px] font-mono">
+                                    <span className="text-slate-500">接受策略</span>
+                                    <div className="flex rounded-lg border border-slate-800 overflow-hidden">
+                                        {[['greedy', '贪心 · temperature = 0'], ['sample', '采样 · temperature > 0']].map(([key, label]) => (
+                                            <button key={key} onClick={() => setStrategy(key)} className={`px-3 py-1 font-bold transition-colors ${strategy === key ? 'bg-orange-600 text-white' : 'bg-slate-950 text-slate-400 hover:bg-slate-800'}`}>{label}</button>
+                                        ))}
+                                    </div>
+                                    <span className="text-slate-500 text-[11px] leading-tight basis-full">
+                                        {strategy === 'greedy' ? '大模型在这个位置最看好的词，和 draft 的某个候选相同就接受；都不同就停，补上大模型的词。' : 'SGLang 默认验证：每层抛一枚随机数，按顺序累加候选词在大模型里的概率 p，随机数落进谁的区间就收谁；都没落进就全拒，再从剩下的词里按 p 抽一个。draft 的 q 不参与。'}
+                                    </span>
+                                </div>
+
+                                <div className="flex flex-wrap items-start gap-2 text-[12px] font-mono">
+                                    <span className="text-slate-500 pt-1.5">小模型猜得怎么样</span>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 flex-1">
+                                        {SCENARIOS.map((sc, i) => (
+                                            <button key={i} onClick={() => setScenarioIdx(i)} className={`px-2 py-1 rounded-lg border text-left transition-colors ${scenarioIdx === i ? 'border-orange-500 bg-orange-950/40 text-white' : 'border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-800'}`}>
+                                                <div className="font-bold leading-tight">{sc.name}</div>
+                                                <div className="text-[10px] mt-0.5 flex gap-2">
+                                                    <span className={strategy === 'greedy' ? 'text-orange-300' : 'text-slate-500'}>贪心：一次出 {scenarioTotals[i].greedy} 个词</span>
+                                                    <span className={strategy === 'sample' ? 'text-orange-300' : 'text-slate-500'}>采样：一次出 {scenarioTotals[i].sample} 个词</span>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <span className="text-slate-500 text-[11px] leading-tight basis-full">
+                                        小模型猜的词不变，变的是大模型认不认。猜错的位置越靠前，一次能出的词越少；最差也出 1 个，和不用投机一样。
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-6 gap-1.5 text-[12px] font-mono text-center mt-1">
                                     {[
                                         { label: "小模型先猜", activePhase: 1, color: "border-violet-500 text-violet-400 bg-violet-950/20" },
                                         { label: "排成 batch", activePhase: 2, color: "border-cyan-500 text-cyan-400 bg-cyan-950/20" },
                                         { label: "Tree Mask", activePhase: 3, color: "border-purple-500 text-purple-400 bg-purple-950/20" },
                                         { label: "大模型核对", activePhase: 4, color: "border-amber-500 text-amber-400 bg-amber-950/20" },
-                                        { label: "留下对的 token", activePhase: 5, color: "border-emerald-500 text-emerald-400 bg-emerald-950/20" }
+                                        { label: "留下对的 token", activePhase: 5, color: "border-emerald-500 text-emerald-400 bg-emerald-950/20" },
+                                        { label: "算收益", activePhase: 6, color: "border-orange-500 text-orange-400 bg-orange-950/20" }
                                     ].map((step, idx) => {
                                         const isCurrent = phase === step.activePhase;
                                         const isDone = phase > step.activePhase;
@@ -634,8 +799,8 @@
                                                             Row {activeRow}: Query [{activeMaskNode.id}] “{activeMaskNode.text}”
                                                             <span className="text-slate-400 font-normal">· {activeMaskKeys.map(node => `${node.id}`).join(' → ')}</span>
                                                         </div>
-                                                        <div className={`border-l-2 pl-3 ${activeMaskAccepted ? 'border-emerald-500 text-emerald-300' : 'border-red-500 text-red-300'}`}>
-                                                            [{activeMaskNode.id}] → Target “{activePrediction?.target ?? '无候选'}” (p={activePrediction?.prob ?? '—'}) · {activeMaskAccepted ? '保留' : '拒绝'}
+                                                        <div className="border-l-2 border-purple-500/60 pl-3 text-slate-300">
+                                                            [{activeMaskNode.id}] draft 给的 q={fmt(activeMaskVerdict?.q)} · 大模型在这个位置给“{activeMaskNode.text}”的 p={fmt(activeTargetDist[activeMaskNode.text] || 0)} · 收不收由 p 决定
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -657,49 +822,93 @@
                                         <div className="text-slate-600 italic animate-pulse">等待树注意力掩码拓扑扫描...</div>
                                     ) : (
                                         <div className="space-y-2.5">
-                                            {TARGET_PREDICTIONS.map((pred, pIdx) => {
-                                                const sourceNode = VALID_NODES.find(n => n.id === pred.sourceId);
-                                                const isSuccessPath = ['n1', 'n4', 'n7'].includes(pred.sourceId);
-                                                const isActiveMaskPrediction = phase === 3 && pred.sourceId === activeMaskNode?.id;
-                                                const showMatch = phase >= 5 || (phase === 4 && pIdx <= 3);
+                                            {VALID_NODES.map((node) => {
+                                                const nv = verdict.verdicts[node.id];
+                                                const isActiveMaskPrediction = phase === 3 && node.id === activeMaskNode?.id;
+                                                const decided = phase >= 5;
+                                                const rowTone = !decided ? 'border-slate-900/50'
+                                                    : nv.decision === 'accept' ? 'border-orange-500/40'
+                                                    : nv.decision === 'reject' ? 'border-red-900/60'
+                                                    : 'border-slate-900/50 opacity-50';
 
                                                 return (
-                                                    <div key={pIdx} className={`flex justify-between items-center border-b pb-1 animate-[slideInRight_0.3s_ease-out] ${isActiveMaskPrediction ? 'bg-purple-900/30 border-purple-500/60 ring-1 ring-purple-500/40 px-2 rounded' : 'border-slate-900/50'}`}>
-                                                        <div className="flex items-center gap-1.5 truncate max-w-[75%]">
-                                                            <span className="text-slate-500">[{pred.sourceId}]</span>
-                                                            <span className="text-slate-300 font-bold">"{sourceNode?.text}"</span>
-                                                            <span className="text-slate-500">→</span>
-                                                            <span className="text-cyan-400">Target:</span>
-                                                            <span className="text-white font-bold">"{pred.target || pred.text}"</span>
+                                                    <div key={node.id} className={`flex justify-between items-center border-b pb-1 animate-[slideInRight_0.3s_ease-out] ${isActiveMaskPrediction ? 'bg-purple-900/30 border-purple-500/60 ring-1 ring-purple-500/40 px-2 rounded' : rowTone}`}>
+                                                        <div className="flex items-center gap-1.5 truncate max-w-[72%]">
+                                                            <span className="text-slate-500">[{node.id}]</span>
+                                                            <span className={`font-bold ${decided && nv.decision === 'reject' ? 'text-slate-500 line-through' : decided && nv.decision === 'accept' ? 'text-white' : 'text-slate-300'}`}>"{node.text}"</span>
+                                                            {phase >= 4 && (
+                                                                <span className="flex items-center gap-1 text-[10px] shrink-0">
+                                                                    <span className="px-1 rounded bg-slate-900 border border-slate-800 text-slate-500" title="draft 给的概率，只决定它能不能进树，验证时不用">q={fmt(nv.q)}</span>
+                                                                    <span className="px-1 rounded bg-cyan-950/60 border border-cyan-800/60 text-cyan-300">p={fmt(nv.p)}</span>
+                                                                    {strategy === 'sample' && decided && nv.coin !== undefined && (
+                                                                        <span className={`px-1 rounded border ${nv.decision === 'accept' ? 'bg-emerald-950/60 border-emerald-800/60 text-emerald-300' : 'bg-slate-900 border-slate-700 text-slate-400'}`}>随机数 {fmt(nv.coin)} {nv.decision === 'accept' ? '落在' : '不在'} [{fmt(nv.lo)}, {fmt(nv.hi)})</span>
+                                                                    )}
+                                                                </span>
+                                                            )}
                                                         </div>
-                                                        
+
                                                         {isActiveMaskPrediction ? (
                                                             <span className="text-[10px] bg-purple-950 text-purple-300 font-bold px-1.5 py-0.5 rounded border border-purple-500 flex items-center gap-0.5">ROW {activeRow}</span>
-                                                        ) : showMatch ? (
-                                                            isSuccessPath ? (
+                                                        ) : decided ? (
+                                                            nv.decision === 'accept' ? (
                                                                 <span className="text-[12px] bg-emerald-950 text-emerald-400 font-bold px-2 py-0.5 rounded border border-emerald-800 flex items-center gap-0.5">
                                                                     <CheckCircle2 className="w-3 h-3"/> ACCEPT
                                                                 </span>
-                                                            ) : (
-                                                                <span className="text-[12px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-900 flex items-center gap-0.5 opacity-60">
+                                                            ) : nv.decision === 'reject' ? (
+                                                                <span className="text-[12px] bg-red-950 text-red-400 px-2 py-0.5 rounded border border-red-900 flex items-center gap-0.5">
                                                                     <XCircle className="w-3 h-3"/> REJECT
                                                                 </span>
+                                                            ) : (
+                                                                <span className="text-[11px] text-slate-600 border border-dashed border-slate-800 px-2 py-0.5 rounded">未到</span>
                                                             )
-                                                        ) : (
+                                                        ) : phase === 4 ? (
                                                             <span className="text-[12px] text-amber-400 animate-pulse">校对中...</span>
+                                                        ) : (
+                                                            <span className="text-[12px] text-slate-700">—</span>
                                                         )}
                                                     </div>
                                                 );
                                             })}
 
-                                            {phase === 5 && (
-                                                <div className="mt-2 bg-emerald-950/30 border border-emerald-500/30 p-2.5 rounded-lg text-emerald-400 animate-[popInScale_0.4s_ease-out]">
-                                                    <div className="font-bold flex items-center gap-1 text-[14px]">
-                                                        <Database className="w-5 h-5 text-emerald-400" /> 本次迭代接收成功！
+                                            {phase >= 5 && verdict.final && (
+                                                <div className="flex justify-between items-center gap-2 border-2 border-dashed border-orange-500/70 bg-orange-950/30 rounded-lg px-2 py-1.5 animate-[fadeInFlow_0.4s_ease-out]">
+                                                    <div className="flex items-center gap-1.5 truncate">
+                                                        <span className="text-orange-400 font-bold">[{verdict.final.kind === 'bonus' ? '附赠' : '纠正'}]</span>
+                                                        <span className="text-slate-400 text-[11px]">{verdict.lastId} 之后 ·</span>
+                                                        <span className="text-white font-bold">"{verdict.final.token}"</span>
+                                                        <span className="text-[10px] px-1 rounded bg-cyan-950/60 border border-cyan-800/60 text-cyan-300">p={fmt(verdict.final.p)}</span>
                                                     </div>
-                                                    <div className="text-[13px] text-emerald-500/80 mt-1.5 leading-relaxed">
-                                                        树节点有效路径为 <span className="font-bold underline">root → n1 → n4 → n7</span>。单次 Forward 直接提交了 <span className="font-bold text-white bg-emerald-800 px-1.5 rounded">4 个 Token</span>，解码效率提升 400%！
+                                                    <span className="text-[11px] text-orange-300 text-right shrink-0">{verdict.final.kind === 'bonus' ? '走到叶子，大模型顺手多给一个' : strategy === 'greedy' ? '大模型最看好的词' : '从去掉被拒候选的 p 里抽一个'}</span>
+                                                </div>
+                                            )}
+
+                                            {phase >= 4 && (
+                                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                                    <div className={`p-2.5 rounded-lg border transition-all duration-500 ${phase >= 6 ? 'border-orange-500/60 bg-orange-950/30' : 'border-dashed border-slate-800 bg-slate-950/40'}`}>
+                                                        <div className="text-[11px] text-slate-500">本次收下 token（含{verdict.final?.kind === 'bonus' ? '附赠' : '纠正'}）</div>
+                                                        <div className={`text-2xl font-bold ${phase >= 6 ? 'text-orange-300' : 'text-slate-700'}`}>{phase >= 6 ? verdict.total : '--'}</div>
                                                     </div>
+                                                    <div className={`p-2.5 rounded-lg border transition-all duration-500 ${phase >= 6 ? 'border-orange-500/60 bg-orange-950/30' : 'border-dashed border-slate-800 bg-slate-950/40'}`}>
+                                                        <div className="text-[11px] text-slate-500">相对一次一个</div>
+                                                        <div className={`text-2xl font-bold ${phase >= 6 ? 'text-orange-300' : 'text-slate-700'}`}>{phase >= 6 ? `${verdict.total}×` : '--'}</div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {phase >= 6 && (
+                                                <div className="mt-2 p-2.5 rounded-lg border border-slate-800 bg-slate-950/40 text-[12px] text-slate-400 leading-relaxed animate-[fadeInFlow_0.4s_ease-out]">
+                                                    <div className="text-[11px] text-slate-500 mb-1">这次接受的路径</div>
+                                                    <div className="text-orange-300 font-bold font-mono">root{verdict.path.map(id => ` → ${id}`).join('')} → [{verdict.final?.token}]</div>
+                                                    <div className="mt-1">一次 Forward 收下 {verdict.total} 个 token{verdict.total === 1 ? '（和一次一个一样）' : ''}。被拒的分支留在树上：红虚线 = 被拒，灰色 = 没走到。</div>
+                                                </div>
+                                            )}
+
+                                            {phase >= 4 && (
+                                                <div className="pt-2 border-t border-slate-900 text-[11px] text-slate-500 leading-snug">
+                                                    <div className="text-slate-400 font-semibold mb-0.5">SGLang 里实际怎么做（按源码）</div>
+                                                    <div>· temperature = 0 时走 <code className="text-slate-400">verify_tree_greedy</code>，就是左边的「贪心」。</div>
+                                                    <div>· temperature &gt; 0 时默认走 <code className="text-slate-400">tree_speculative_sampling_target_only</code>，传进去的 draft 概率是全零，只用大模型的 p 判定，就是「采样」。</div>
+                                                    <div>· 部署配置几乎都是 <code className="text-slate-400">--speculative-eagle-topk 1</code>，每层只留 1 个候选，这棵树退化成一条链；MTP 常用 steps 1～3、draft tokens 2～4。这里画成每层 3 个候选是为了看清同层比较。</div>
                                                 </div>
                                             )}
                                         </div>
